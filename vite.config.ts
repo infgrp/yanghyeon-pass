@@ -1,12 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// GitHub Pages 배포 시 저장소 이름에 맞춰 base 를 조정하세요.
-// 예: https://<user>.github.io/yanghyeon_pass/  ->  base: "/yanghyeon_pass/"
+// Vercel 호스팅 기준: 루트 도메인 배포(base "/"), 기본 출력 폴더 dist 사용.
 export default defineConfig({
   plugins: [react()],
-  base: "./",
-  build: {
-    outDir: "docs", // GitHub Pages(docs/) 배포용
-  },
+  base: "/",
 });

@@ -33,8 +33,21 @@ supabase/
 npm install
 cp .env.example .env   # Supabase URL/anon key 입력
 npm run dev            # 개발 서버
-npm run build          # docs/ 에 정적 빌드 (GitHub Pages 배포용)
+npm run build          # dist/ 에 정적 빌드
 ```
+
+## 배포 (Vercel)
+
+GitHub 저장소를 Vercel에 연결하면 push 할 때마다 자동 배포됩니다.
+
+1. [vercel.com](https://vercel.com) → **Add New → Project** → 이 GitHub 저장소 **Import**
+2. Framework: **Vite** (자동 감지), Build: `npm run build`, Output: `dist`
+3. **Environment Variables** 에 추가 (Supabase Settings → API 값):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. **Deploy** → 발급된 `*.vercel.app` URL 로 접속
+
+SPA 라우팅(`/admin` 등 새로고침)은 [vercel.json](vercel.json) 의 rewrite 로 처리됩니다.
 
 ## Supabase 설정
 
