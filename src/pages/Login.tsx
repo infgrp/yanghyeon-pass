@@ -13,6 +13,7 @@ export default function Login() {
   const [pw, setPw] = useState("");
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [teacherCode, setTeacherCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -32,14 +33,16 @@ export default function Login() {
         nav("/", { replace: true });
       } else {
         if (!name.trim()) throw new Error("이름을 입력하세요.");
+        // 교사 가입 코드가 있으면 함께 전송 → 서버 트리거가 검증해 교사 권한 부여.
+        // (역할은 클라이언트가 정하지 않고 서버가 코드로 판정합니다.)
         const { error } = await supabase.auth.signUp({
           email,
           password: pw,
           options: {
             data: {
               name: name.trim(),
-              role: "student",
-              student_id: studentId.trim() || null,
+              student_id: teacherCode.trim() ? null : studentId.trim() || null,
+              signup_code: teacherCode.trim() || null,
             },
           },
         });
@@ -104,7 +107,18 @@ export default function Login() {
                 placeholder="30101"
                 inputMode="numeric"
                 maxLength={5}
+                disabled={!!teacherCode.trim()}
               />
+              <label>교사 가입 코드 (교사만 입력)</label>
+              <input
+                value={teacherCode}
+                onChange={(e) => setTeacherCode(e.target.value)}
+                placeholder="교직원에게 배포된 코드"
+                autoComplete="off"
+              />
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                코드를 입력하면 교사 계정으로 가입됩니다. 학생은 비워두세요.
+              </div>
             </>
           )}
           <label>이메일 (학교 계정)</label>

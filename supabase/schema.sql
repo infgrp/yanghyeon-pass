@@ -39,6 +39,26 @@ create table if not exists public.passes (
 create index if not exists passes_student_idx on public.passes (student_id, date desc);
 create index if not exists passes_status_idx  on public.passes (status, date desc);
 
+-- ──────────────────────────────────────────────
+-- 2b. role 제약에 'admin' 추가 (기존 DB 재실행 대비 명시적 갱신)
+-- ──────────────────────────────────────────────
+alter table public.users drop constraint if exists users_role_check;
+alter table public.users add constraint users_role_check
+  check (role in ('student', 'teacher', 'parent', 'admin'));
+
+-- ──────────────────────────────────────────────
+-- 2c. teacher_codes 테이블 (교사 가입 코드 — 공유 코드 방식)
+--    admin 이 코드를 발급/폐기/만료 관리. 가입 트리거가 이 표를 대조합니다.
+-- ──────────────────────────────────────────────
+create table if not exists public.teacher_codes (
+  code        text primary key,            -- 교사에게 배포하는 가입 코드
+  label       varchar(50),                 -- 메모 (예: "2026-1학기")
+  active      boolean not null default true,
+  expires_at  timestamptz,                 -- null = 무기한
+  created_by  uuid references public.users (id),
+  created_at  timestamptz not null default now()
+);
+
 -- updated_at 자동 갱신 트리거
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
@@ -59,13 +79,29 @@ create trigger passes_touch_updated_at
 -- ──────────────────────────────────────────────
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_code text := new.raw_user_meta_data ->> 'signup_code';
+  v_role text := 'student';   -- 기본은 항상 학생. 클라이언트가 보낸 role 은 신뢰하지 않음.
 begin
+  -- 교사 가입 코드 검증: 유효한 코드일 때만 교사 권한 부여 (서버에서만 판정)
+  if v_code is not null and length(trim(v_code)) > 0 then
+    if exists (
+      select 1 from public.teacher_codes c
+      where c.code = trim(v_code)
+        and c.active
+        and (c.expires_at is null or c.expires_at > now())
+    ) then
+      v_role := 'teacher';
+    end if;
+  end if;
+
   insert into public.users (id, name, role, student_id, parent_phone)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'name', '이름미정'),
-    coalesce(new.raw_user_meta_data ->> 'role', 'student'),
-    new.raw_user_meta_data ->> 'student_id',
+    v_role,
+    -- 교사는 학번이 없으므로 무시
+    case when v_role = 'student' then new.raw_user_meta_data ->> 'student_id' else null end,
     new.raw_user_meta_data ->> 'parent_phone'
   )
   on conflict (id) do nothing;
@@ -79,6 +115,30 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ──────────────────────────────────────────────
+-- 3b. 권한 상승 차단 가드
+--    사용자가 본인 행을 수정할 때 role/student_id 를 바꾸지 못하게 막습니다.
+--    (admin 또는 서버/SQL Editor 컨텍스트(auth.uid() is null)는 예외)
+-- ──────────────────────────────────────────────
+create or replace function public.guard_users_update()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.is_admin() then
+    return new;  -- 서버(SQL Editor)·관리자는 자유롭게 변경 가능
+  end if;
+  if new.role is distinct from old.role
+     or new.student_id is distinct from old.student_id then
+    raise exception '권한(role)·학번(student_id)은 직접 변경할 수 없습니다';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists users_guard_update on public.users;
+create trigger users_guard_update
+  before update on public.users
+  for each row execute function public.guard_users_update();
+
+-- ──────────────────────────────────────────────
 -- 4. 권한 헬퍼 (RLS 재귀 방지를 위해 SECURITY DEFINER 사용)
 -- ──────────────────────────────────────────────
 create or replace function public.is_teacher()
@@ -89,11 +149,20 @@ returns boolean language sql security definer stable set search_path = public as
   );
 $$;
 
+create or replace function public.is_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (
+    select 1 from public.users
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- ──────────────────────────────────────────────
 -- 5. Row Level Security (RLS)
 -- ──────────────────────────────────────────────
-alter table public.users  enable row level security;
-alter table public.passes enable row level security;
+alter table public.users         enable row level security;
+alter table public.passes        enable row level security;
+alter table public.teacher_codes enable row level security;
 
 -- users: 본인 행 조회 / 교사 정보는 모두 조회(승인자 이름 표기용) /
 --        교사는 전체 조회 / 본인 행 수정
@@ -138,7 +207,26 @@ create policy passes_select_teacher on public.passes
 create policy passes_update_teacher on public.passes
   for update using (public.is_teacher());
 
+-- teacher_codes: admin 만 전체 관리(CRUD). 일반 사용자는 접근 불가.
+--   (가입 코드 검증은 트리거(SECURITY DEFINER)가 RLS 우회로 수행하므로
+--    학생/교사가 이 표를 직접 읽을 필요는 없습니다.)
+drop policy if exists teacher_codes_admin_all on public.teacher_codes;
+create policy teacher_codes_admin_all on public.teacher_codes
+  for all using (public.is_admin()) with check (public.is_admin());
+
 -- ============================================================
--- 참고: 가입 후 특정 계정을 교사로 승격시키려면 (SQL Editor에서)
---   update public.users set role = 'teacher' where id = '<auth-uid>';
+-- 부트스트랩 / 운영 참고 (SQL Editor 에서 실행)
+--
+-- 1) 최초 관리자 지정 (가입한 본인 계정을 admin 으로):
+--    update public.users set role = 'admin'
+--    where id = (select id from auth.users where email = '<관리자이메일>');
+--
+-- 2) 교사 가입 코드 발급 (공유 코드):
+--    insert into public.teacher_codes (code, label) values ('YH2026-TEACHER', '2026 교직원');
+--
+-- 3) 코드 폐기 / 교체:
+--    update public.teacher_codes set active = false where code = 'YH2026-TEACHER';
+--
+-- 4) (수동) 특정 계정 교사 승격:
+--    update public.users set role = 'teacher' where id = '<auth-uid>';
 -- ============================================================

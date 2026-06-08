@@ -6,17 +6,16 @@ import StudentHome from "./pages/StudentHome";
 import ApplyPass from "./pages/ApplyPass";
 import PassDetail from "./pages/PassDetail";
 import TeacherHome from "./pages/TeacherHome";
+import AdminHome from "./pages/AdminHome";
 
 /** 로그인 상태/역할에 따라 시작 경로 결정 */
 function HomeRedirect() {
   const { session, profile, loading } = useAuth();
   if (loading) return <div className="center muted">불러오는 중…</div>;
   if (!session) return <Navigate to="/login" replace />;
-  return profile?.role === "teacher" ? (
-    <Navigate to="/teacher" replace />
-  ) : (
-    <StudentHome />
-  );
+  if (profile?.role === "admin") return <Navigate to="/admin" replace />;
+  if (profile?.role === "teacher") return <Navigate to="/teacher" replace />;
+  return <StudentHome />;
 }
 
 export default function App() {
@@ -45,6 +44,14 @@ export default function App() {
         element={
           <ProtectedRoute role="teacher">
             <TeacherHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute role="admin">
+            <AdminHome />
           </ProtectedRoute>
         }
       />
