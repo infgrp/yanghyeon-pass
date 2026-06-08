@@ -10,8 +10,20 @@ interface TeacherCode {
   created_at: string;
 }
 
+interface ManagedUser {
+  id: string;
+  name: string;
+  student_id: string | null;
+  role: string;
+  homeroom: string | null;
+  email: string | null;
+}
+
+type Tab = "codes" | "users";
+
 export default function AdminHome() {
   const { profile, session, signOut } = useAuth();
+  const [tab, setTab] = useState<Tab>("codes");
   const [codes, setCodes] = useState<TeacherCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -21,6 +33,62 @@ export default function AdminHome() {
   const [newLabel, setNewLabel] = useState("");
   const [newExpiry, setNewExpiry] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // 사용자 관리
+  const [userQuery, setUserQuery] = useState("");
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [userBusy, setUserBusy] = useState(false);
+  const [userMsg, setUserMsg] = useState("");
+  const [userErr, setUserErr] = useState("");
+
+  async function callAdminFn(body: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke("admin-users", { body });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function searchUsers(e?: React.FormEvent) {
+    e?.preventDefault();
+    setUserErr("");
+    setUserMsg("");
+    setUserBusy(true);
+    try {
+      const data = await callAdminFn({ action: "search", query: userQuery.trim() });
+      setUsers((data.users ?? []) as ManagedUser[]);
+      if ((data.users ?? []).length === 0) setUserMsg("검색 결과가 없습니다.");
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "검색 실패");
+    } finally {
+      setUserBusy(false);
+    }
+  }
+
+  async function resetPw(u: ManagedUser) {
+    if (!confirm(`${u.name}님의 비밀번호를 초기화할까요?`)) return;
+    setUserErr("");
+    setUserMsg("");
+    try {
+      const data = await callAdminFn({ action: "reset_password", target_id: u.id });
+      setUserMsg(`✅ ${u.name}님 임시 비밀번호: ${data.temp_password}  (본인에게 전달 후 변경 안내)`);
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "초기화 실패");
+    }
+  }
+
+  async function changeEmail(u: ManagedUser) {
+    const next = prompt(`${u.name}님의 새 이메일(아이디):`, u.email ?? "");
+    if (!next || !next.trim()) return;
+    setUserErr("");
+    setUserMsg("");
+    try {
+      await callAdminFn({ action: "change_email", target_id: u.id, new_email: next.trim() });
+      setUserMsg(`✅ ${u.name}님 이메일을 ${next.trim()} 로 변경했습니다.`);
+      searchUsers();
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "이메일 변경 실패");
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,7 +155,7 @@ export default function AdminHome() {
     <div className="app">
       <div className="topbar">
         <div>
-          <h1>관리자 · 교사 가입 코드</h1>
+          <h1>관리자</h1>
           <div className="sub">{profile?.name} (admin)</div>
         </div>
         <button className="btn-link" style={{ color: "#fff" }} onClick={signOut}>
@@ -96,6 +164,89 @@ export default function AdminHome() {
       </div>
 
       <div className="content">
+        <div className="seg" style={{ marginBottom: 16 }}>
+          <button
+            className={tab === "codes" ? "active" : ""}
+            onClick={() => setTab("codes")}
+          >
+            교사 코드
+          </button>
+          <button
+            className={tab === "users" ? "active" : ""}
+            onClick={() => setTab("users")}
+          >
+            사용자 관리
+          </button>
+        </div>
+
+        {tab === "users" && (
+          <>
+            <form onSubmit={searchUsers} className="card">
+              <div className="title" style={{ fontWeight: 700, marginBottom: 4 }}>
+                사용자 검색
+              </div>
+              <label>이름 또는 학번</label>
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="비우고 검색하면 전체"
+                />
+                <button
+                  className="btn-primary"
+                  style={{ width: "auto", paddingInline: 20 }}
+                  disabled={userBusy}
+                  type="submit"
+                >
+                  {userBusy ? "검색…" : "검색"}
+                </button>
+              </div>
+              {userErr && <div className="error">{userErr}</div>}
+              {userMsg && (
+                <div className="notice" style={{ marginTop: 12 }}>
+                  {userMsg}
+                </div>
+              )}
+            </form>
+
+            {users.map((u) => (
+              <div className="card" key={u.id}>
+                <div className="row spread">
+                  <div>
+                    <div className="title">
+                      {u.name}{" "}
+                      <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
+                        {u.role}
+                        {u.student_id ? ` · ${u.student_id}` : ""}
+                        {u.homeroom ? ` · 담임 ${u.homeroom}` : ""}
+                      </span>
+                    </div>
+                    <div className="meta">{u.email ?? "이메일 없음"}</div>
+                  </div>
+                </div>
+                <div className="row" style={{ marginTop: 12, gap: 8 }}>
+                  <button
+                    className="btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => resetPw(u)}
+                  >
+                    비밀번호 초기화
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => changeEmail(u)}
+                  >
+                    이메일 변경
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {tab === "codes" && (
+        <>
         <form onSubmit={createCode} className="card">
           <div className="title" style={{ fontWeight: 700, marginBottom: 4 }}>
             새 코드 발급
@@ -183,6 +334,8 @@ export default function AdminHome() {
               </div>
             );
           })
+        )}
+        </>
         )}
       </div>
     </div>
