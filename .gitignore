@@ -1,0 +1,7 @@
+node_modules
+.env
+.env.local
+*.log
+.DS_Store
+.vite
+# 빌드 산출물(docs/)은 GitHub Pages 배포를 위해 커밋합니다.
