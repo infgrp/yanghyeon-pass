@@ -6,6 +6,7 @@ export interface UserProfile {
   name: string;
   role: Role;
   parent_phone: string | null;
+  homeroom: string | null; // 교사 담임반 "301", 그 외 null
 }
 
 export interface Pass {

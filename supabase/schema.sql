@@ -46,6 +46,9 @@ alter table public.users drop constraint if exists users_role_check;
 alter table public.users add constraint users_role_check
   check (role in ('student', 'teacher', 'parent', 'admin'));
 
+-- 교사 담임반 (예: "301" = 3학년 1반 = 학번 앞 3자리). 학생/관리자는 NULL.
+alter table public.users add column if not exists homeroom varchar(3);
+
 -- ──────────────────────────────────────────────
 -- 2c. teacher_codes 테이블 (교사 가입 코드 — 공유 코드 방식)
 --    admin 이 코드를 발급/폐기/만료 관리. 가입 트리거가 이 표를 대조합니다.
@@ -82,6 +85,7 @@ returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_code text := new.raw_user_meta_data ->> 'signup_code';
   v_role text := 'student';   -- 기본은 항상 학생. 클라이언트가 보낸 role 은 신뢰하지 않음.
+  v_homeroom text := nullif(trim(new.raw_user_meta_data ->> 'homeroom'), '');
 begin
   -- 교사 가입 코드 검증: 유효한 코드일 때만 교사 권한 부여 (서버에서만 판정)
   if v_code is not null and length(trim(v_code)) > 0 then
@@ -95,14 +99,16 @@ begin
     end if;
   end if;
 
-  insert into public.users (id, name, role, student_id, parent_phone)
+  insert into public.users (id, name, role, student_id, parent_phone, homeroom)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'name', '이름미정'),
     v_role,
     -- 교사는 학번이 없으므로 무시
     case when v_role = 'student' then new.raw_user_meta_data ->> 'student_id' else null end,
-    new.raw_user_meta_data ->> 'parent_phone'
+    new.raw_user_meta_data ->> 'parent_phone',
+    -- 담임반은 교사일 때만 저장
+    case when v_role = 'teacher' then v_homeroom else null end
   )
   on conflict (id) do nothing;
   return new;
@@ -126,8 +132,9 @@ begin
     return new;  -- 서버(SQL Editor)·관리자는 자유롭게 변경 가능
   end if;
   if new.role is distinct from old.role
-     or new.student_id is distinct from old.student_id then
-    raise exception '권한(role)·학번(student_id)은 직접 변경할 수 없습니다';
+     or new.student_id is distinct from old.student_id
+     or new.homeroom is distinct from old.homeroom then
+    raise exception '권한(role)·학번(student_id)·담임반(homeroom)은 직접 변경할 수 없습니다';
   end if;
   return new;
 end;
@@ -157,6 +164,27 @@ returns boolean language sql security definer stable set search_path = public as
   );
 $$;
 
+-- 현재 로그인한 교사의 담임반("301") 반환 (학생/관리자는 NULL)
+create or replace function public.my_homeroom()
+returns text language sql security definer stable set search_path = public as $$
+  select homeroom from public.users where id = auth.uid();
+$$;
+
+-- 현재 로그인한 교사가 해당 학생의 담임인지 (학번 앞 3자리 == 담임반)
+create or replace function public.teaches_student(p_student uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (
+    select 1
+    from public.users t
+    join public.users s on s.id = p_student
+    where t.id = auth.uid()
+      and t.role = 'teacher'
+      and t.homeroom is not null
+      and s.student_id is not null
+      and substr(s.student_id, 1, 3) = t.homeroom
+  );
+$$;
+
 -- ──────────────────────────────────────────────
 -- 5. Row Level Security (RLS)
 -- ──────────────────────────────────────────────
@@ -169,6 +197,7 @@ alter table public.teacher_codes enable row level security;
 drop policy if exists users_select_self     on public.users;
 drop policy if exists users_select_teachers on public.users;
 drop policy if exists users_select_teacher  on public.users;
+drop policy if exists users_select_homeroom on public.users;
 drop policy if exists users_update_self     on public.users;
 
 create policy users_select_self on public.users
@@ -178,8 +207,13 @@ create policy users_select_self on public.users
 create policy users_select_teachers on public.users
   for select using (role = 'teacher');
 
-create policy users_select_teacher on public.users
-  for select using (public.is_teacher());
+-- 교사는 '자기 담임반 학생'만 조회 가능 (전체 조회 불가 → 개인정보 최소화)
+create policy users_select_homeroom on public.users
+  for select using (
+    student_id is not null
+    and public.my_homeroom() is not null
+    and substr(student_id, 1, 3) = public.my_homeroom()
+  );
 
 create policy users_update_self on public.users
   for update using (id = auth.uid());
@@ -201,11 +235,12 @@ create policy passes_insert_self on public.passes
 create policy passes_delete_pending on public.passes
   for delete using (student_id = auth.uid() and status = 0);
 
+-- 교사는 '자기 담임반 학생'의 신청만 조회/처리 가능
 create policy passes_select_teacher on public.passes
-  for select using (public.is_teacher());
+  for select using (public.teaches_student(student_id));
 
 create policy passes_update_teacher on public.passes
-  for update using (public.is_teacher());
+  for update using (public.teaches_student(student_id));
 
 -- teacher_codes: admin 만 전체 관리(CRUD). 일반 사용자는 접근 불가.
 --   (가입 코드 검증은 트리거(SECURITY DEFINER)가 RLS 우회로 수행하므로

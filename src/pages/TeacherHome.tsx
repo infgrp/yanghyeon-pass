@@ -8,6 +8,7 @@ import {
   STATUS_LABEL,
   STATUS_COLOR,
   formatStudentId,
+  formatHomeroom,
   trimTime,
 } from "../lib/constants";
 
@@ -69,7 +70,9 @@ export default function TeacherHome() {
       <div className="topbar">
         <div>
           <h1>외출·조퇴 승인</h1>
-          <div className="sub">{profile?.name} 선생님</div>
+          <div className="sub">
+            {profile?.name} 선생님 · 담임 {formatHomeroom(profile?.homeroom)}
+          </div>
         </div>
         <button className="btn-link" style={{ color: "#fff" }} onClick={signOut}>
           로그아웃

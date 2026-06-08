@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, isConfigured } from "../lib/supabase";
+import { buildHomeroom } from "../lib/constants";
 
 /**
  * 로그인 / 회원가입 — Supabase Auth (이메일 + 비밀번호, 학교 계정)
@@ -11,9 +12,12 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
+  const [hrGrade, setHrGrade] = useState("");
+  const [hrClass, setHrClass] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -33,6 +37,15 @@ export default function Login() {
         nav("/", { replace: true });
       } else {
         if (!name.trim()) throw new Error("이름을 입력하세요.");
+        if (pw !== pw2) throw new Error("비밀번호가 일치하지 않습니다.");
+        const isTeacher = !!teacherCode.trim();
+        // 교사는 담임반(학년/반) 필수
+        let homeroom: string | null = null;
+        if (isTeacher) {
+          if (!hrGrade.trim() || !hrClass.trim())
+            throw new Error("교사는 담임 학년과 반을 입력하세요.");
+          homeroom = buildHomeroom(hrGrade, hrClass);
+        }
         // 교사 가입 코드가 있으면 함께 전송 → 서버 트리거가 검증해 교사 권한 부여.
         // (역할은 클라이언트가 정하지 않고 서버가 코드로 판정합니다.)
         const { error } = await supabase.auth.signUp({
@@ -41,8 +54,9 @@ export default function Login() {
           options: {
             data: {
               name: name.trim(),
-              student_id: teacherCode.trim() ? null : studentId.trim() || null,
+              student_id: isTeacher ? null : studentId.trim() || null,
               signup_code: teacherCode.trim() || null,
+              homeroom,
             },
           },
         });
@@ -119,6 +133,30 @@ export default function Login() {
               <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 코드를 입력하면 교사 계정으로 가입됩니다. 학생은 비워두세요.
               </div>
+              {!!teacherCode.trim() && (
+                <>
+                  <label>담임 학년 / 반 (교사 필수)</label>
+                  <div className="row" style={{ gap: 12 }}>
+                    <input
+                      value={hrGrade}
+                      onChange={(e) => setHrGrade(e.target.value)}
+                      placeholder="학년 (예: 3)"
+                      inputMode="numeric"
+                      maxLength={1}
+                    />
+                    <input
+                      value={hrClass}
+                      onChange={(e) => setHrClass(e.target.value)}
+                      placeholder="반 (예: 1)"
+                      inputMode="numeric"
+                      maxLength={2}
+                    />
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    담임반 학생의 외출·조퇴만 승인할 수 있습니다.
+                  </div>
+                </>
+              )}
             </>
           )}
           <label>이메일 (학교 계정)</label>
@@ -139,6 +177,22 @@ export default function Login() {
             required
             minLength={6}
           />
+          {mode === "signup" && (
+            <>
+              <label>비밀번호 확인</label>
+              <input
+                type="password"
+                value={pw2}
+                onChange={(e) => setPw2(e.target.value)}
+                autoComplete="new-password"
+                required
+                minLength={6}
+              />
+              {pw2 && pw !== pw2 && (
+                <div className="error">비밀번호가 일치하지 않습니다.</div>
+              )}
+            </>
+          )}
           {err && <div className="error">{err}</div>}
           {msg && <div className="notice" style={{ marginTop: 12 }}>{msg}</div>}
           <button

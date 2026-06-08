@@ -59,3 +59,16 @@ export function trimTime(t: string | null | undefined): string {
   if (!t) return "";
   return t.slice(0, 5);
 }
+
+/** 학년 3, 반 1 -> "301" (담임반 코드 = 학번 앞 3자리) */
+export function buildHomeroom(grade: number | string, cls: number | string): string {
+  const g = String(grade).trim();
+  const c = String(cls).trim().padStart(2, "0");
+  return `${g}${c}`;
+}
+
+/** "301" -> "3학년 1반" */
+export function formatHomeroom(hr: string | null | undefined): string {
+  if (!hr || hr.length < 3) return hr ?? "-";
+  return `${hr[0]}학년 ${Number(hr.slice(1, 3))}반`;
+}
