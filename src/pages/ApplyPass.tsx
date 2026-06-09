@@ -35,18 +35,34 @@ export default function ApplyPass() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.from("passes").insert({
-      student_id: session!.user.id,
-      type,
-      reason: reason.trim().slice(0, 100),
-      date,
-      start_time: start,
-      end_time: end,
-      status: PASS_STATUS.PENDING,
-    });
+    const { data: inserted, error } = await supabase
+      .from("passes")
+      .insert({
+        student_id: session!.user.id,
+        type,
+        reason: reason.trim().slice(0, 100),
+        date,
+        start_time: start,
+        end_time: end,
+        status: PASS_STATUS.PENDING,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      setBusy(false);
+      setErr(error.message);
+      return;
+    }
+    // 담임에게 즉시 알림 (실패해도 신청 자체는 성공 처리)
+    try {
+      await supabase.functions.invoke("notify-pass", {
+        body: { pass_id: inserted.id },
+      });
+    } catch {
+      /* 알림 실패는 무시 */
+    }
     setBusy(false);
-    if (error) setErr(error.message);
-    else nav("/", { replace: true });
+    nav("/", { replace: true });
   }
 
   return (

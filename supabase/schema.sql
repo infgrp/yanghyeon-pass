@@ -67,6 +67,20 @@ create table if not exists public.teacher_codes (
   created_at  timestamptz not null default now()
 );
 
+-- ──────────────────────────────────────────────
+-- 2d. push_subscriptions 테이블 (웹 푸시 구독 — 담임 즉시 알림)
+--    교사가 '알림 켜기' 하면 기기 구독정보 저장. notify-pass 함수가 발송에 사용.
+-- ──────────────────────────────────────────────
+create table if not exists public.push_subscriptions (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null references public.users (id) on delete cascade,
+  endpoint   text not null unique,
+  p256dh     text not null,
+  auth       text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_sub_user_idx on public.push_subscriptions (user_id);
+
 -- updated_at 자동 갱신 트리거
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
@@ -193,9 +207,15 @@ $$;
 -- ──────────────────────────────────────────────
 -- 5. Row Level Security (RLS)
 -- ──────────────────────────────────────────────
-alter table public.users         enable row level security;
-alter table public.passes        enable row level security;
-alter table public.teacher_codes enable row level security;
+alter table public.users              enable row level security;
+alter table public.passes             enable row level security;
+alter table public.teacher_codes      enable row level security;
+alter table public.push_subscriptions enable row level security;
+
+-- push_subscriptions: 본인 구독만 생성/조회/삭제 (발송은 service_role 함수가 우회)
+drop policy if exists push_sub_self on public.push_subscriptions;
+create policy push_sub_self on public.push_subscriptions
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- users: 본인 행 조회 / 교사 정보는 모두 조회(승인자 이름 표기용) /
 --        교사는 전체 조회 / 본인 행 수정

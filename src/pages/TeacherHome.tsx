@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { pushSupported, isSubscribed, enablePush, disablePush } from "../lib/push";
 import type { PassWithStudent } from "../lib/types";
 import {
   PASS_STATUS,
@@ -21,6 +22,34 @@ export default function TeacherHome() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [actingId, setActingId] = useState<number | null>(null);
+
+  // 웹 푸시 알림
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState("");
+
+  useEffect(() => {
+    if (pushSupported()) isSubscribed().then(setPushOn);
+  }, []);
+
+  async function togglePush() {
+    setPushMsg("");
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await disablePush();
+        setPushOn(false);
+      } else {
+        await enablePush();
+        setPushOn(true);
+        setPushMsg("✅ 담임반 학생이 신청하면 이 기기로 알림이 옵니다.");
+      }
+    } catch (e) {
+      setPushMsg(e instanceof Error ? e.message : "알림 설정 실패");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +123,26 @@ export default function TeacherHome() {
             처리완료
           </button>
         </div>
+
+        {pushSupported() && (
+          <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div className="title" style={{ fontSize: 14 }}>🔔 신청 알림</div>
+              <div className="meta">
+                {pushOn ? "이 기기로 알림을 받는 중" : "담임반 학생 신청 시 폰 알림 받기"}
+              </div>
+            </div>
+            <button
+              className={pushOn ? "btn-ghost" : "btn-primary"}
+              style={{ width: "auto", paddingInline: 18 }}
+              disabled={pushBusy}
+              onClick={togglePush}
+            >
+              {pushBusy ? "…" : pushOn ? "끄기" : "알림 켜기"}
+            </button>
+          </div>
+        )}
+        {pushMsg && <div className="notice" style={{ marginBottom: 12 }}>{pushMsg}</div>}
 
         {loading ? (
           <div className="center muted">불러오는 중…</div>
