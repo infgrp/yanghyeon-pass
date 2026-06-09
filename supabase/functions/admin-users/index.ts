@@ -121,6 +121,33 @@ Deno.serve(async (req) => {
       return json({ ok: true, email: newEmail });
     }
 
+    if (action === "set_homeroom") {
+      // 교사 담임반 지정/변경 (service_role 이므로 guard 우회). homeroom 빈값이면 해제(null).
+      const targetId = String(payload.target_id ?? "");
+      const raw = String(payload.homeroom ?? "").trim();
+      if (!targetId) return json({ error: "대상 사용자가 없습니다." }, 400);
+      const homeroom = raw === "" ? null : raw;
+      if (homeroom !== null && !/^\d{3}$/.test(homeroom))
+        return json({ error: "담임반은 3자리 숫자여야 합니다 (예: 303)." }, 400);
+      const { error } = await admin
+        .from("users")
+        .update({ homeroom })
+        .eq("id", targetId);
+      if (error) return json({ error: error.message }, 400);
+      return json({ ok: true, homeroom });
+    }
+
+    if (action === "delete_user") {
+      // 계정 삭제 → public.users/passes 는 FK on delete cascade 로 함께 삭제됨.
+      const targetId = String(payload.target_id ?? "");
+      if (!targetId) return json({ error: "대상 사용자가 없습니다." }, 400);
+      if (targetId === user.id)
+        return json({ error: "본인(관리자) 계정은 삭제할 수 없습니다." }, 400);
+      const { error } = await admin.auth.admin.deleteUser(targetId);
+      if (error) return json({ error: error.message }, 400);
+      return json({ ok: true });
+    }
+
     return json({ error: `알 수 없는 action: ${action}` }, 400);
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "서버 오류" }, 500);

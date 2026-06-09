@@ -90,6 +90,45 @@ export default function AdminHome() {
     }
   }
 
+  async function setHomeroom(u: ManagedUser) {
+    const next = prompt(
+      `${u.name}님 담임반 (예: 303 = 3학년 3반, 비우면 해제):`,
+      u.homeroom ?? "",
+    );
+    if (next === null) return;
+    setUserErr("");
+    setUserMsg("");
+    try {
+      const data = await callAdminFn({
+        action: "set_homeroom",
+        target_id: u.id,
+        homeroom: next.trim(),
+      });
+      setUserMsg(`✅ ${u.name}님 담임반을 ${data.homeroom ?? "해제"} 로 설정했습니다.`);
+      searchUsers();
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "담임반 설정 실패");
+    }
+  }
+
+  async function deleteUser(u: ManagedUser) {
+    if (
+      !confirm(
+        `${u.name}님(${u.email}) 계정을 완전히 삭제할까요?\n신청 내역도 함께 삭제되며, 같은 이메일로 다시 가입할 수 있습니다.`,
+      )
+    )
+      return;
+    setUserErr("");
+    setUserMsg("");
+    try {
+      await callAdminFn({ action: "delete_user", target_id: u.id });
+      setUserMsg(`🗑️ ${u.name}님 계정을 삭제했습니다. 이제 재가입할 수 있습니다.`);
+      searchUsers();
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "삭제 실패");
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
@@ -238,6 +277,22 @@ export default function AdminHome() {
                     onClick={() => changeEmail(u)}
                   >
                     이메일 변경
+                  </button>
+                </div>
+                <div className="row" style={{ marginTop: 8, gap: 8 }}>
+                  <button
+                    className="btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => setHomeroom(u)}
+                  >
+                    담임반 지정
+                  </button>
+                  <button
+                    className="btn-reject"
+                    style={{ flex: 1 }}
+                    onClick={() => deleteUser(u)}
+                  >
+                    계정 삭제
                   </button>
                 </div>
               </div>

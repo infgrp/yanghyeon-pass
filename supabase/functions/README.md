@@ -24,3 +24,13 @@ npx supabase functions deploy admin-users --project-ref uvqeandtehjvgamljvbd
 | `search` | `query` | 이름·학번으로 사용자 검색(+이메일) |
 | `reset_password` | `target_id`, (`new_password`?) | 비밀번호 초기화(미지정 시 임시비번 생성·반환) |
 | `change_email` | `target_id`, `new_email` | 이메일(아이디) 변경(즉시 확정) |
+
+## verify-pass
+외출증 **공개 실시간 검증** 함수. QR(`/verify/:id?t=token`) 스캔 시 호출되며 **로그인 불필요**.
+`pass_id + token(verify_token)` 이 일치할 때만 그 외출증의 실시간 상태를 반환합니다(이름은 마스킹).
+위조 이미지의 QR 은 토큰 불일치로 검증 실패 → 이미지 위조 무력화.
+
+```bash
+# 공개 함수이므로 JWT 검증을 끄고 배포
+npx supabase functions deploy verify-pass --no-verify-jwt --project-ref uvqeandtehjvgamljvbd
+```
