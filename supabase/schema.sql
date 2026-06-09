@@ -134,7 +134,12 @@ begin
   insert into public.users (id, name, role, student_id, parent_phone, homeroom)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'name', '이름미정'),
+    -- 이메일가입은 'name', 구글 OAuth 는 'full_name'/'name' 에 이름이 들어옴
+    coalesce(
+      new.raw_user_meta_data ->> 'name',
+      new.raw_user_meta_data ->> 'full_name',
+      '이름미정'
+    ),
     v_role,
     -- 교사는 학번이 없으므로 무시
     case when v_role = 'student' then new.raw_user_meta_data ->> 'student_id' else null end,

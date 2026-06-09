@@ -8,12 +8,20 @@ import PassDetail from "./pages/PassDetail";
 import TeacherHome from "./pages/TeacherHome";
 import AdminHome from "./pages/AdminHome";
 import VerifyPass from "./pages/VerifyPass";
+import Onboarding from "./pages/Onboarding";
+
+/** 프로필 미완성(구글 첫 로그인 학생 등) 여부 */
+function needsOnboarding(role?: string, studentId?: string | null) {
+  return role === "student" && !studentId;
+}
 
 /** 로그인 상태/역할에 따라 시작 경로 결정 */
 function HomeRedirect() {
   const { session, profile, loading } = useAuth();
   if (loading) return <div className="center muted">불러오는 중…</div>;
   if (!session) return <Navigate to="/login" replace />;
+  if (needsOnboarding(profile?.role, profile?.student_id))
+    return <Navigate to="/onboarding" replace />;
   if (profile?.role === "admin") return <Navigate to="/admin" replace />;
   if (profile?.role === "teacher") return <Navigate to="/teacher" replace />;
   return <StudentHome />;
@@ -25,6 +33,14 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       {/* 공개 검증 페이지 (교문 경비용, 로그인 불필요) */}
       <Route path="/verify/:id" element={<VerifyPass />} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <Onboarding />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<HomeRedirect />} />
       <Route
         path="/apply"
