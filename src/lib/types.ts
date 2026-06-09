@@ -19,6 +19,7 @@ export interface Pass {
   end_time: string; // HH:MM:SS
   status: number; // 0~3
   teacher_id: string | null;
+  verify_token: string;
   created_at: string;
   updated_at: string;
 }
@@ -42,4 +43,5 @@ export interface PassCertificateData {
   time_window: string; // "14:00-16:30"
   status: number;
   teacher_name: string;
+  verify_token?: string; // QR 검증용 (상세화면에서만 채워짐)
 }

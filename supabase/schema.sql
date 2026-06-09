@@ -32,12 +32,17 @@ create table if not exists public.passes (
   end_time    time not null,
   status      smallint not null default 0 check (status in (0, 1, 2, 3)),
   teacher_id  uuid references public.users (id),
+  -- QR 실시간 검증용 토큰 (위조 방어): QR 에 포함되어 공개 검증 함수가 대조
+  verify_token uuid not null default gen_random_uuid(),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 
 create index if not exists passes_student_idx on public.passes (student_id, date desc);
 create index if not exists passes_status_idx  on public.passes (status, date desc);
+
+-- 기존 DB 재실행 대비: 컬럼이 없으면 추가 (기존 행은 행마다 고유 uuid 채움)
+alter table public.passes add column if not exists verify_token uuid not null default gen_random_uuid();
 
 -- ──────────────────────────────────────────────
 -- 2b. role 제약에 'admin' 추가 (기존 DB 재실행 대비 명시적 갱신)

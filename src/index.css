@@ -221,90 +221,313 @@ button {
   margin: 8px 0;
 }
 
-/* ──────────────── 외출증 양식 (Zero-Image, 순수 CSS/SVG) ──────────────── */
+/* ──────────────── 외출증 양식 (Zero-Image · 위조방어) ──────────────── */
 .cert {
-  background: #fff;
-  border: 2px solid var(--navy);
-  border-radius: 6px;
-  padding: 0;
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #fbfcfe 0%, #f6f8fb 55%, #eef2f7 100%);
+  border: 1px solid #d4dbe6;
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 18px 40px -18px rgba(20, 41, 67, 0.45),
+    0 2px 6px rgba(20, 41, 67, 0.08);
+  --accent: #1e3a5f;
 }
+.cert-outing {
+  --accent: #1f7a3d;
+}
+.cert-leave {
+  --accent: #1e3a5f;
+}
+
+/* 홀로그램 상단 띠 (애니메이션 → 캡처 시 멈춤) */
+.cert-holo {
+  height: 6px;
+  background: linear-gradient(
+    100deg,
+    #b8860b, #f5d27a, #1e3a5f, #4aa3df, #1f7a3d, #f5d27a, #b8860b
+  );
+  background-size: 300% 100%;
+  animation: holoshift 6s linear infinite;
+}
+@keyframes holoshift {
+  to {
+    background-position: 300% 0;
+  }
+}
+
 .cert-head {
   text-align: center;
-  padding: 18px 16px 12px;
-  border-bottom: 2px solid var(--navy);
+  padding: 20px 16px 16px;
   position: relative;
 }
+.cert-head::after {
+  content: "";
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
+}
 .cert-emblem {
-  width: 44px;
-  height: 44px;
-  margin: 0 auto 6px;
+  width: 50px;
+  height: 50px;
+  margin: 0 auto 8px;
+  filter: drop-shadow(0 2px 4px rgba(20, 41, 67, 0.25));
 }
 .cert-title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
-  letter-spacing: 6px;
-  color: var(--navy);
-  margin: 4px 0 2px;
+  letter-spacing: 10px;
+  color: var(--accent);
+  margin: 2px 0 2px;
+  padding-left: 10px; /* letter-spacing 보정 */
 }
 .cert-school {
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 2px;
   color: var(--muted);
 }
 .cert-no {
   position: absolute;
-  top: 12px;
-  right: 14px;
-  font-size: 12px;
+  top: 14px;
+  right: 16px;
+  font-size: 11px;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
   color: var(--muted);
 }
-.cert-table {
-  width: 100%;
-  border-collapse: collapse;
+
+.cert-body {
+  padding: 16px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
 }
-.cert-table th,
-.cert-table td {
-  border: 1px solid var(--line);
-  padding: 11px 12px;
-  font-size: 14px;
-  text-align: left;
+.cert-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
 }
-.cert-table th {
-  background: #f3f5f8;
-  color: var(--navy);
-  width: 30%;
+.cert-field {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.cert-field .k {
+  flex: 0 0 44px;
+  font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
+  color: var(--accent);
+  letter-spacing: 1px;
 }
-.cert-reason td {
-  min-height: 56px;
+.cert-field .v {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text);
+  border-bottom: 1px dashed #cfd6e1;
+  padding-bottom: 4px;
+  min-width: 0;
+  word-break: break-all;
 }
-.cert-foot {
-  padding: 16px;
-  text-align: center;
+.cert-field .v.big {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.cert-grid2 .cert-field .k {
+  flex-basis: 32px;
+}
+
+/* 절취선 */
+.cert-perf {
+  display: flex;
+  align-items: center;
+  margin: 8px 0 0;
+  position: relative;
+}
+.cert-perf .dash {
+  flex: 1;
+  border-top: 2px dashed #c3ccda;
+  height: 0;
+}
+.cert-perf .notch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px #d4dbe6;
+}
+.cert-perf .notch.left {
+  margin-left: -9px;
+}
+.cert-perf .notch.right {
+  margin-right: -9px;
+}
+
+/* QR 검증 영역 */
+.cert-verify {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+}
+.cert-qr {
+  flex: 0 0 auto;
+  background: #fff;
+  padding: 7px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(20, 41, 67, 0.12);
+  line-height: 0;
+}
+.qr-skel {
+  width: 92px;
+  height: 92px;
+  background: #eef2f7;
+  border-radius: 4px;
+}
+.cert-verify-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: space-between;
 }
 .cert-stamp {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 84px;
-  height: 84px;
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
-  border: 3px solid var(--status-color, var(--navy));
+  border: 2.5px solid var(--status-color, var(--navy));
   color: var(--status-color, var(--navy));
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 2px;
-  transform: rotate(-12deg);
-  margin: 6px 0;
+  transform: rotate(-11deg);
+  overflow: hidden;
+  flex: 0 0 auto;
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      transparent 0 5px,
+      color-mix(in srgb, var(--status-color) 7%, transparent) 5px 6px
+    );
 }
-.cert-foot .teacher {
-  font-size: 14px;
-  margin-top: 10px;
+/* 도장 위로 흐르는 광택 (라이브니스) */
+.cert-stamp-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.7) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: shine 3.2s ease-in-out infinite;
 }
-.cert-foot .issued {
+@keyframes shine {
+  0%, 60% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+.cert-meta {
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+.cert-meta .vcode {
+  font-family: ui-monospace, "SFMono-Regular", monospace;
   font-size: 12px;
   color: var(--muted);
+  letter-spacing: 1px;
+}
+.cert-meta .liveclock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.cert-meta .liveclock .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ecc71;
+  box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.6);
+  animation: pulse 1.4s ease-out infinite;
+}
+@keyframes pulse {
+  to { box-shadow: 0 0 0 7px rgba(46, 204, 113, 0); }
+}
+.cert-foot-line {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 16px 16px;
+}
+
+/* ──────────────── 공개 검증 페이지 ──────────────── */
+.verify-card {
+  background: #fff;
+  border: 3px solid var(--navy);
+  border-radius: 16px;
+  padding: 24px 20px;
+  text-align: center;
+  box-shadow: 0 10px 28px -14px rgba(20, 41, 67, 0.4);
+  margin-bottom: 12px;
+}
+.verify-card.invalid {
+  border-color: #b23b3b;
+}
+.verify-mark {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 800;
+}
+.verify-status {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  margin-top: 6px;
+}
+.verify-sub {
+  font-size: 14px;
+  color: var(--muted);
   margin-top: 4px;
+}
+.verify-rows {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.verify-rows > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.verify-rows .k {
+  flex: 0 0 48px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.verify-rows .v {
+  flex: 1;
+  text-align: left;
+  font-size: 16px;
 }

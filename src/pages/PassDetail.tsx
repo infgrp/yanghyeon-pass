@@ -28,7 +28,7 @@ export default function PassDetail() {
       const { data: pass, error } = await supabase
         .from("passes")
         .select(
-          "id, student_id, type, reason, date, start_time, end_time, status, teacher_id",
+          "id, student_id, type, reason, date, start_time, end_time, status, teacher_id, verify_token",
         )
         .eq("id", passId)
         .single();
@@ -54,6 +54,7 @@ export default function PassDetail() {
         time_window: `${trimTime(pass.start_time)}-${trimTime(pass.end_time)}`,
         status: pass.status,
         teacher_name: teacher?.name ?? "",
+        verify_token: pass.verify_token,
       };
     }
 
