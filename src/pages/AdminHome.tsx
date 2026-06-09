@@ -19,7 +19,7 @@ interface ManagedUser {
   email: string | null;
 }
 
-type Tab = "codes" | "users";
+type Tab = "codes" | "users" | "account";
 
 export default function AdminHome() {
   const { profile, session, signOut } = useAuth();
@@ -40,6 +40,37 @@ export default function AdminHome() {
   const [userBusy, setUserBusy] = useState(false);
   const [userMsg, setUserMsg] = useState("");
   const [userErr, setUserErr] = useState("");
+
+  // 내 비밀번호 변경
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwErr, setPwErr] = useState("");
+
+  async function changeMyPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwErr("");
+    setPwMsg("");
+    if (pw1.length < 6) {
+      setPwErr("비밀번호는 6자 이상이어야 합니다.");
+      return;
+    }
+    if (pw1 !== pw2) {
+      setPwErr("비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    setPwBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw1 });
+    setPwBusy(false);
+    if (error) {
+      setPwErr(error.message);
+      return;
+    }
+    setPw1("");
+    setPw2("");
+    setPwMsg("✅ 비밀번호가 변경되었습니다.");
+  }
 
   async function callAdminFn(body: Record<string, unknown>) {
     const { data, error } = await supabase.functions.invoke("admin-users", { body });
@@ -216,7 +247,48 @@ export default function AdminHome() {
           >
             사용자 관리
           </button>
+          <button
+            className={tab === "account" ? "active" : ""}
+            onClick={() => setTab("account")}
+          >
+            내 계정
+          </button>
         </div>
+
+        {tab === "account" && (
+          <form onSubmit={changeMyPassword} className="card">
+            <div className="title" style={{ fontWeight: 700, marginBottom: 4 }}>
+              🔑 내 비밀번호 변경
+            </div>
+            <div className="meta" style={{ marginBottom: 8 }}>
+              {profile?.name} ({profile?.role})
+            </div>
+            <label>새 비밀번호</label>
+            <input
+              type="password"
+              value={pw1}
+              onChange={(e) => setPw1(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+            />
+            <label>새 비밀번호 확인</label>
+            <input
+              type="password"
+              value={pw2}
+              onChange={(e) => setPw2(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+            />
+            {pw2 && pw1 !== pw2 && (
+              <div className="error">비밀번호가 일치하지 않습니다.</div>
+            )}
+            {pwErr && <div className="error">{pwErr}</div>}
+            {pwMsg && <div className="notice" style={{ marginTop: 12 }}>{pwMsg}</div>}
+            <button className="btn-primary" style={{ marginTop: 16 }} disabled={pwBusy} type="submit">
+              {pwBusy ? "변경 중…" : "비밀번호 변경"}
+            </button>
+          </form>
+        )}
 
         {tab === "users" && (
           <>
