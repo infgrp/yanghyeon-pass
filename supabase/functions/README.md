@@ -34,3 +34,16 @@ npx supabase functions deploy admin-users --project-ref uvqeandtehjvgamljvbd
 # 공개 함수이므로 JWT 검증을 끄고 배포
 npx supabase functions deploy verify-pass --no-verify-jwt --project-ref uvqeandtehjvgamljvbd
 ```
+
+## notify-pass
+학생이 외출·조퇴를 신청하면 **담임(학번 앞3자리=homeroom 매칭)에게 웹 푸시 알림**을 보냅니다.
+호출자(학생) JWT 를 검증하고 본인 신청건인지 확인 후, 담임의 `push_subscriptions` 로 발송합니다.
+
+```bash
+# VAPID 비공개키를 시크릿으로 설정 (1회)
+npx supabase secrets set VAPID_PRIVATE_KEY=<private> --project-ref uvqeandtehjvgamljvbd
+# 배포 (JWT 검증 유지 — 로그인한 학생만 호출)
+npx supabase functions deploy notify-pass --project-ref uvqeandtehjvgamljvbd
+```
+
+> 프론트엔드에는 VAPID **공개키**만(`VITE_VAPID_PUBLIC_KEY`), 함수에는 **비공개키**만 둡니다.
