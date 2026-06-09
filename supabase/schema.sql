@@ -31,7 +31,7 @@ create table if not exists public.passes (
   start_time  time not null,
   end_time    time not null,
   status      smallint not null default 0 check (status in (0, 1, 2, 3)),
-  teacher_id  uuid references public.users (id),
+  teacher_id  uuid references public.users (id) on delete set null,
   -- QR 실시간 검증용 토큰 (위조 방어): QR 에 포함되어 공개 검증 함수가 대조
   verify_token uuid not null default gen_random_uuid(),
   created_at  timestamptz not null default now(),
@@ -63,7 +63,7 @@ create table if not exists public.teacher_codes (
   label       varchar(50),                 -- 메모 (예: "2026-1학기")
   active      boolean not null default true,
   expires_at  timestamptz,                 -- null = 무기한
-  created_by  uuid references public.users (id),
+  created_by  uuid references public.users (id) on delete set null,
   created_at  timestamptz not null default now()
 );
 
@@ -80,6 +80,19 @@ create table if not exists public.push_subscriptions (
   created_at timestamptz not null default now()
 );
 create index if not exists push_sub_user_idx on public.push_subscriptions (user_id);
+
+-- ──────────────────────────────────────────────
+-- 2e. 사용자 삭제 차단 방지 (기존 DB 재실행 대비)
+--    교사 삭제 시 그가 참조된 passes.teacher_id / teacher_codes.created_by 가
+--    삭제를 막지 않도록 ON DELETE SET NULL 로 교체.
+-- ──────────────────────────────────────────────
+alter table public.passes drop constraint if exists passes_teacher_id_fkey;
+alter table public.passes add constraint passes_teacher_id_fkey
+  foreign key (teacher_id) references public.users (id) on delete set null;
+
+alter table public.teacher_codes drop constraint if exists teacher_codes_created_by_fkey;
+alter table public.teacher_codes add constraint teacher_codes_created_by_fkey
+  foreign key (created_by) references public.users (id) on delete set null;
 
 -- updated_at 자동 갱신 트리거
 create or replace function public.touch_updated_at()
