@@ -6,6 +6,7 @@ import {
   STATUS_LABEL,
   STATUS_COLOR,
   SCHOOL_NAME,
+  PUBLIC_BASE_URL,
   formatStudentId,
 } from "../lib/constants";
 
@@ -32,7 +33,7 @@ export default function PassCertificate({ data }: { data: PassCertificateData })
 
   // QR: 공개 검증 페이지로 연결 (pass_id + verify_token)
   const verifyUrl = data.verify_token
-    ? `${window.location.origin}/verify/${data.pass_id}?t=${data.verify_token}`
+    ? `${PUBLIC_BASE_URL}/verify/${data.pass_id}?t=${data.verify_token}`
     : "";
 
   // 동적 검증코드 (표시용)
@@ -106,7 +107,7 @@ export default function PassCertificate({ data }: { data: PassCertificateData })
       <div className="cert-verify">
         <div className="cert-qr">
           {verifyUrl ? (
-            <QRCodeSVG value={verifyUrl} size={92} level="M" includeMargin={false} />
+            <QRCodeSVG value={verifyUrl} size={92} level="M" marginSize={0} />
           ) : (
             <div className="qr-skel" />
           )}

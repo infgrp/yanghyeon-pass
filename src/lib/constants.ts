@@ -33,6 +33,15 @@ export const STATUS_COLOR: Record<number, string> = {
 
 export const SCHOOL_NAME = "양현고등학교";
 
+/**
+ * QR 검증 링크의 기준 주소. 항상 공개 실서비스 도메인을 가리켜야
+ * 교문에서 스캔 시 로그인 없이 검증 페이지가 열립니다.
+ * (프리뷰/배포별 URL 은 Vercel 보호로 로그인 요구가 뜨므로 사용하지 않음)
+ */
+export const PUBLIC_BASE_URL =
+  (import.meta.env.VITE_PUBLIC_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://yanghyeon-pass.vercel.app";
+
 /** 학번 "30101" -> { grade: 3, cls: 1, num: 1 } */
 export function parseStudentId(sid: string | null | undefined): {
   grade: number;
