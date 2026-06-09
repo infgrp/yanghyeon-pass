@@ -2,11 +2,14 @@
 """admin-users Edge Function 검증:
    - 관리자만 호출 가능(학생/교사는 403)
    - 비밀번호 초기화가 실제로 적용되는지"""
-import json, time, urllib.request, urllib.error
+import json, time, os, urllib.request, urllib.error
 
-BASE = "https://uvqeandtehjvgamljvbd.supabase.co"
+# 자격증명은 환경변수로 주입 (저장소에 하드코딩 금지)
+BASE = os.environ["SUPABASE_URL"].rstrip("/")
+ANON = os.environ["SUPABASE_ANON_KEY"]
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@yanghyeon.hs.kr")
+ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 FN = BASE + "/functions/v1/admin-users"
-ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cWVhbmR0ZWhqdmdhbWxqdmJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4OTQ4MTksImV4cCI6MjA5NjQ3MDgxOX0.1Yb1yoXgowd11C88U2gwCTeMh-hG5VYYRzBCiX0qaaw"
 
 
 def post(url, token, body):
@@ -53,7 +56,7 @@ print("  admin-users Edge Function 검증")
 print("=" * 58)
 
 # 관리자 로그인
-admin = signin("admin@yanghyeon.hs.kr", "yhadmin!2026")
+admin = signin(ADMIN_EMAIL, ADMIN_PASSWORD)
 atok = admin["access_token"]
 
 # 검증 대상 학생 1명 생성
