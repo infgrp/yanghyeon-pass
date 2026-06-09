@@ -143,6 +143,14 @@ Deno.serve(async (req) => {
       if (!targetId) return json({ error: "대상 사용자가 없습니다." }, 400);
       if (targetId === user.id)
         return json({ error: "본인(관리자) 계정은 삭제할 수 없습니다." }, 400);
+      // 관리자 계정은 실수로도 삭제 불가
+      const { data: target } = await admin
+        .from("users")
+        .select("role")
+        .eq("id", targetId)
+        .single();
+      if (target?.role === "admin")
+        return json({ error: "관리자 계정은 삭제할 수 없습니다." }, 400);
       const { error } = await admin.auth.admin.deleteUser(targetId);
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true });

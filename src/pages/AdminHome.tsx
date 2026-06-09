@@ -143,6 +143,10 @@ export default function AdminHome() {
   }
 
   async function deleteUser(u: ManagedUser) {
+    if (u.role === "admin") {
+      setUserErr("관리자 계정은 삭제할 수 없습니다.");
+      return;
+    }
     if (
       !confirm(
         `${u.name}님(${u.email}) 계정을 완전히 삭제할까요?\n신청 내역도 함께 삭제되며, 같은 이메일로 다시 가입할 수 있습니다.`,
@@ -363,8 +367,10 @@ export default function AdminHome() {
                     className="btn-reject"
                     style={{ flex: 1 }}
                     onClick={() => deleteUser(u)}
+                    disabled={u.role === "admin"}
+                    title={u.role === "admin" ? "관리자 계정은 삭제할 수 없습니다" : undefined}
                   >
-                    계정 삭제
+                    {u.role === "admin" ? "삭제 불가(관리자)" : "계정 삭제"}
                   </button>
                 </div>
               </div>
