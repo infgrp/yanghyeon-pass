@@ -40,6 +40,77 @@ export default function AdminHome() {
   const [userBusy, setUserBusy] = useState(false);
   const [userMsg, setUserMsg] = useState("");
   const [userErr, setUserErr] = useState("");
+  // 학년/반 필터 + 다중 선택
+  const [grade, setGrade] = useState("");
+  const [klass, setKlass] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  async function runSearch(opts: { query?: string; prefix?: string }) {
+    setUserErr("");
+    setUserMsg("");
+    setSelected(new Set());
+    setUserBusy(true);
+    try {
+      const body: Record<string, unknown> = { action: "search" };
+      if (opts.prefix) body.student_prefix = opts.prefix;
+      else body.query = (opts.query ?? "").trim();
+      const data = await callAdminFn(body);
+      setUsers((data.users ?? []) as ManagedUser[]);
+      if ((data.users ?? []).length === 0) setUserMsg("결과가 없습니다.");
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "조회 실패");
+    } finally {
+      setUserBusy(false);
+    }
+  }
+
+  function filterBy(g: string, k: string) {
+    setGrade(g);
+    setKlass(k);
+    if (!g) {
+      runSearch({ query: userQuery });
+      return;
+    }
+    const prefix = k ? `${g}${k.padStart(2, "0")}` : g;
+    runSearch({ prefix });
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const deletableIds = users.filter((u) => u.role !== "admin").map((u) => u.id);
+  const allSelected = deletableIds.length > 0 && deletableIds.every((id) => selected.has(id));
+
+  function toggleSelectAll() {
+    setSelected(allSelected ? new Set() : new Set(deletableIds));
+  }
+
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!confirm(`선택한 ${ids.length}명을 삭제할까요? (관리자 계정은 자동 제외)`)) return;
+    setUserErr("");
+    setUserMsg("");
+    setUserBusy(true);
+    try {
+      const data = await callAdminFn({ action: "delete_users", target_ids: ids });
+      setUserMsg(`🗑️ ${data.deleted}명 삭제 완료${data.skipped ? ` (제외 ${data.skipped}명)` : ""}.`);
+      setSelected(new Set());
+      // 현재 필터 유지하며 재조회
+      if (grade) filterBy(grade, klass);
+      else runSearch({ query: userQuery });
+    } catch (e) {
+      setUserErr(e instanceof Error ? e.message : "일괄 삭제 실패");
+    } finally {
+      setUserBusy(false);
+    }
+  }
 
   // 내 비밀번호 변경
   const [pw1, setPw1] = useState("");
@@ -81,17 +152,18 @@ export default function AdminHome() {
 
   async function searchUsers(e?: React.FormEvent) {
     e?.preventDefault();
-    setUserErr("");
-    setUserMsg("");
-    setUserBusy(true);
-    try {
-      const data = await callAdminFn({ action: "search", query: userQuery.trim() });
-      setUsers((data.users ?? []) as ManagedUser[]);
-      if ((data.users ?? []).length === 0) setUserMsg("검색 결과가 없습니다.");
-    } catch (e) {
-      setUserErr(e instanceof Error ? e.message : "검색 실패");
-    } finally {
-      setUserBusy(false);
+    setGrade("");
+    setKlass("");
+    await runSearch({ query: userQuery });
+  }
+
+  // 개별 작업 후 현재 보기(학년/반 필터 또는 검색어) 유지하며 재조회
+  function refreshUsers() {
+    if (grade) {
+      const prefix = klass ? `${grade}${klass.padStart(2, "0")}` : grade;
+      runSearch({ prefix });
+    } else {
+      runSearch({ query: userQuery });
     }
   }
 
@@ -115,7 +187,7 @@ export default function AdminHome() {
     try {
       await callAdminFn({ action: "change_email", target_id: u.id, new_email: next.trim() });
       setUserMsg(`✅ ${u.name}님 이메일을 ${next.trim()} 로 변경했습니다.`);
-      searchUsers();
+      refreshUsers();
     } catch (e) {
       setUserErr(e instanceof Error ? e.message : "이메일 변경 실패");
     }
@@ -136,7 +208,7 @@ export default function AdminHome() {
         homeroom: next.trim(),
       });
       setUserMsg(`✅ ${u.name}님 담임반을 ${data.homeroom ?? "해제"} 로 설정했습니다.`);
-      searchUsers();
+      refreshUsers();
     } catch (e) {
       setUserErr(e instanceof Error ? e.message : "담임반 설정 실패");
     }
@@ -158,7 +230,7 @@ export default function AdminHome() {
     try {
       await callAdminFn({ action: "delete_user", target_id: u.id });
       setUserMsg(`🗑️ ${u.name}님 계정을 삭제했습니다. 이제 재가입할 수 있습니다.`);
-      searchUsers();
+      refreshUsers();
     } catch (e) {
       setUserErr(e instanceof Error ? e.message : "삭제 실패");
     }
@@ -324,10 +396,89 @@ export default function AdminHome() {
               )}
             </form>
 
+            {/* 학년 / 반 필터 */}
+            <div className="card">
+              <label style={{ marginTop: 0 }}>학년</label>
+              <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+                <button
+                  className={grade === "" ? "active" : ""}
+                  onClick={() => filterBy("", "")}
+                >
+                  전체
+                </button>
+                {["1", "2", "3"].map((g) => (
+                  <button
+                    key={g}
+                    className={grade === g ? "active" : ""}
+                    onClick={() => filterBy(g, "")}
+                  >
+                    {g}학년
+                  </button>
+                ))}
+              </div>
+              {grade && (
+                <>
+                  <label>반</label>
+                  <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+                    <button
+                      className={klass === "" ? "active" : ""}
+                      onClick={() => filterBy(grade, "")}
+                    >
+                      전체
+                    </button>
+                    {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((k) => (
+                      <button
+                        key={k}
+                        className={klass === k ? "active" : ""}
+                        style={{ flex: "0 0 auto", minWidth: 44 }}
+                        onClick={() => filterBy(grade, k)}
+                      >
+                        {k}반
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 다중 선택 / 일괄 삭제 바 */}
+            {users.length > 0 && (
+              <div
+                className="card row spread"
+                style={{ alignItems: "center", position: "sticky", top: 64, zIndex: 5 }}
+              >
+                <label style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: 18, height: 18 }}
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                  />
+                  전체 선택 ({selected.size}명)
+                </label>
+                <button
+                  className="btn-reject"
+                  style={{ width: "auto", paddingInline: 18, opacity: selected.size ? 1 : 0.5 }}
+                  disabled={selected.size === 0 || userBusy}
+                  onClick={deleteSelected}
+                >
+                  선택 삭제
+                </button>
+              </div>
+            )}
+
             {users.map((u) => (
               <div className="card" key={u.id}>
-                <div className="row spread">
-                  <div>
+                <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: 18, height: 18, marginTop: 3 }}
+                    checked={selected.has(u.id)}
+                    disabled={u.role === "admin"}
+                    onChange={() => toggleSelect(u.id)}
+                    title={u.role === "admin" ? "관리자는 선택 삭제 불가" : undefined}
+                  />
+                  <div style={{ flex: 1 }}>
                     <div className="title">
                       {u.name}{" "}
                       <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>

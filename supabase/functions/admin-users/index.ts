@@ -75,23 +75,54 @@ Deno.serve(async (req) => {
   try {
     if (action === "search") {
       const q = String(payload.query ?? "").trim();
-      // 이름 또는 학번으로 검색 (관리자는 전체 조회 가능)
-      let sel = admin
-        .from("users")
-        .select("id, name, student_id, role, homeroom")
-        .order("role")
-        .limit(20);
-      if (q) sel = sel.or(`name.ilike.%${q}%,student_id.ilike.%${q}%`);
+      const prefix = String(payload.student_prefix ?? "").trim();
+      let sel = admin.from("users").select("id, name, student_id, role, homeroom");
+      if (prefix) {
+        // 학년/반 단위 조회 (학번 앞자리 접두어). 한 반 인원 여유있게 300까지
+        sel = sel.like("student_id", `${prefix}%`).order("student_id").limit(300);
+      } else if (q) {
+        sel = sel.or(`name.ilike.%${q}%,student_id.ilike.%${q}%`).order("role").limit(50);
+      } else {
+        sel = sel.order("role").limit(50);
+      }
       const { data: rows, error } = await sel;
       if (error) return json({ error: error.message }, 400);
 
-      // 각 사용자의 이메일(아이디)을 보강
-      const result = [];
-      for (const r of rows ?? []) {
-        const { data: au } = await admin.auth.admin.getUserById(r.id);
-        result.push({ ...r, email: au?.user?.email ?? null });
-      }
+      // 각 사용자의 이메일(아이디)을 병렬로 보강
+      const result = await Promise.all(
+        (rows ?? []).map(async (r) => {
+          const { data: au } = await admin.auth.admin.getUserById(r.id);
+          return { ...r, email: au?.user?.email ?? null };
+        }),
+      );
       return json({ users: result });
+    }
+
+    if (action === "delete_users") {
+      // 여러 계정 일괄 삭제 (관리자·본인은 자동 제외)
+      const ids = Array.isArray(payload.target_ids)
+        ? payload.target_ids.map(String)
+        : [];
+      if (ids.length === 0) return json({ error: "대상이 없습니다." }, 400);
+      const { data: targets } = await admin
+        .from("users")
+        .select("id, role")
+        .in("id", ids);
+      const roleById = new Map((targets ?? []).map((t) => [t.id, t.role]));
+      let deleted = 0;
+      let skipped = 0;
+      await Promise.all(
+        ids.map(async (id) => {
+          if (id === user.id || roleById.get(id) === "admin") {
+            skipped++;
+            return;
+          }
+          const { error } = await admin.auth.admin.deleteUser(id);
+          if (error) skipped++;
+          else deleted++;
+        }),
+      );
+      return json({ ok: true, deleted, skipped });
     }
 
     if (action === "reset_password") {
