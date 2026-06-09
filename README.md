@@ -4,6 +4,8 @@
 
 **라이브:** https://yanghyeon-pass.vercel.app
 
+> 🏫 **다른 학교에서 운영하려면?** → [SETUP.md](SETUP.md) (Fork 후 처음부터 띄우는 단계별 가이드)
+
 | | |
 | :--- | :--- |
 | **프론트엔드** | React + Vite + TypeScript (SPA · PWA) |
