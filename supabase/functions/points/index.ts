@@ -65,9 +65,11 @@ Deno.serve(async (req) => {
   try {
     if (action === "search") {
       const q = String(body.query ?? "").trim();
+      const prefix = String(body.student_prefix ?? "").trim();
       let sel = admin.from("users").select("id, name, student_id").eq("role", "student");
-      if (q) sel = sel.or(`name.ilike.%${q}%,student_id.ilike.%${q}%`);
-      sel = sel.order("student_id").limit(50);
+      if (prefix) sel = sel.like("student_id", `${prefix}%`);
+      else if (q) sel = sel.or(`name.ilike.%${q}%,student_id.ilike.%${q}%`);
+      sel = sel.order("student_id").limit(prefix ? 1000 : 50);
       const { data: students, error } = await sel;
       if (error) return json({ error: error.message }, 400);
       const totals = await totalsFor((students ?? []).map((s) => s.id));
@@ -76,6 +78,41 @@ Deno.serve(async (req) => {
         return { ...s, merit: t.merit, demerit: t.demerit, net: t.merit - t.demerit };
       });
       return json({ students: result });
+    }
+
+    if (action === "export_detail") {
+      // 상세 내역(엑셀용): 학급/학년 또는 전체. 학생·교사 이름 포함.
+      const prefix = String(body.student_prefix ?? "").trim();
+      let usel = admin.from("users").select("id, name, student_id").eq("role", "student");
+      if (prefix) usel = usel.like("student_id", `${prefix}%`);
+      const { data: studs } = await usel.limit(2000);
+      const info = new Map((studs ?? []).map((s) => [s.id, s]));
+      const ids = (studs ?? []).map((s) => s.id);
+      if (!ids.length) return json({ entries: [] });
+      const { data: pts } = await admin
+        .from("points")
+        .select("student_id, kind, amount, reason, teacher_id, created_at")
+        .in("student_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(5000);
+      const tids = [...new Set((pts ?? []).map((p) => p.teacher_id).filter(Boolean))] as string[];
+      const { data: teachers } = tids.length
+        ? await admin.from("users").select("id, name").in("id", tids)
+        : { data: [] };
+      const tname = new Map((teachers ?? []).map((t) => [t.id, t.name]));
+      const entries = (pts ?? []).map((p) => {
+        const s = info.get(p.student_id);
+        return {
+          created_at: p.created_at,
+          student_id: s?.student_id ?? "",
+          name: s?.name ?? "",
+          kind: p.kind,
+          amount: p.amount,
+          reason: p.reason,
+          teacher: p.teacher_id ? tname.get(p.teacher_id) ?? "" : "",
+        };
+      });
+      return json({ entries });
     }
 
     if (action === "give") {

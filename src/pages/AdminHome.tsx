@@ -1,6 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { POINT_LABEL, formatHomeroom, formatStudentId, trimTime } from "../lib/constants";
+
+/** CSV 다운로드 (엑셀에서 바로 열림, 한글 BOM 포함) */
+function downloadCSV(filename: string, rows: (string | number)[][]) {
+  const csv = rows
+    .map((r) =>
+      r
+        .map((cell) => {
+          const s = String(cell ?? "");
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        })
+        .join(","),
+    )
+    .join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface TeacherCode {
   code: string;
@@ -19,7 +41,16 @@ interface ManagedUser {
   email: string | null;
 }
 
-type Tab = "codes" | "users" | "account";
+type Tab = "codes" | "users" | "account" | "points";
+
+interface PointStudentRow {
+  id: string;
+  name: string;
+  student_id: string | null;
+  merit: number;
+  demerit: number;
+  net: number;
+}
 
 export default function AdminHome() {
   const { profile, session, signOut } = useAuth();
@@ -148,6 +179,89 @@ export default function AdminHome() {
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
     return data;
+  }
+
+  async function callPointsFn(body: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke("points", { body });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  // 상벌점 집계/내보내기
+  const [pGrade, setPGrade] = useState("");
+  const [pClass, setPClass] = useState("");
+  const [pRows, setPRows] = useState<PointStudentRow[]>([]);
+  const [pBusy, setPBusy] = useState(false);
+  const [pErr, setPErr] = useState("");
+
+  function prefixOf(g: string, k: string) {
+    if (!g) return "";
+    return k ? `${g}${k.padStart(2, "0")}` : g;
+  }
+
+  async function loadPoints(g: string, k: string) {
+    setPGrade(g);
+    setPClass(k);
+    setPErr("");
+    setPBusy(true);
+    try {
+      const prefix = prefixOf(g, k);
+      const data = await callPointsFn(
+        prefix ? { action: "search", student_prefix: prefix } : { action: "search", query: "" },
+      );
+      setPRows((data.students ?? []) as PointStudentRow[]);
+    } catch (e) {
+      setPErr(e instanceof Error ? e.message : "조회 실패");
+    } finally {
+      setPBusy(false);
+    }
+  }
+
+  function downloadSummary() {
+    const scope = pGrade ? `${pGrade}학년${pClass ? `_${pClass}반` : ""}` : "전체";
+    const rows: (string | number)[][] = [["학급", "학번", "이름", "상점", "벌점", "합산"]];
+    for (const s of pRows) {
+      rows.push([
+        formatHomeroom(s.student_id?.slice(0, 3)),
+        s.student_id ?? "",
+        s.name,
+        s.merit,
+        s.demerit,
+        s.net,
+      ]);
+    }
+    downloadCSV(`상벌점_요약_${scope}.csv`, rows);
+  }
+
+  async function downloadDetail() {
+    setPErr("");
+    setPBusy(true);
+    try {
+      const prefix = prefixOf(pGrade, pClass);
+      const data = await callPointsFn({ action: "export_detail", student_prefix: prefix });
+      const scope = pGrade ? `${pGrade}학년${pClass ? `_${pClass}반` : ""}` : "전체";
+      const rows: (string | number)[][] = [
+        ["일시", "학급", "학번", "이름", "구분", "점수", "사유", "부여교사"],
+      ];
+      for (const e of data.entries ?? []) {
+        rows.push([
+          `${e.created_at.slice(0, 10)} ${trimTime(e.created_at.slice(11))}`,
+          formatHomeroom(String(e.student_id).slice(0, 3)),
+          e.student_id,
+          e.name,
+          POINT_LABEL[e.kind],
+          e.amount,
+          e.reason,
+          e.teacher,
+        ]);
+      }
+      downloadCSV(`상벌점_상세_${scope}.csv`, rows);
+    } catch (e) {
+      setPErr(e instanceof Error ? e.message : "내보내기 실패");
+    } finally {
+      setPBusy(false);
+    }
   }
 
   async function searchUsers(e?: React.FormEvent) {
@@ -324,12 +438,82 @@ export default function AdminHome() {
             사용자 관리
           </button>
           <button
+            className={tab === "points" ? "active" : ""}
+            onClick={() => setTab("points")}
+          >
+            상벌점
+          </button>
+          <button
             className={tab === "account" ? "active" : ""}
             onClick={() => setTab("account")}
           >
             내 계정
           </button>
         </div>
+
+        {tab === "points" && (
+          <>
+            <div className="card">
+              <label style={{ marginTop: 0 }}>학년</label>
+              <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+                <button className={pGrade === "" ? "active" : ""} onClick={() => loadPoints("", "")}>전체</button>
+                {["1", "2", "3"].map((g) => (
+                  <button key={g} className={pGrade === g ? "active" : ""} onClick={() => loadPoints(g, "")}>
+                    {g}학년
+                  </button>
+                ))}
+              </div>
+              {pGrade && (
+                <>
+                  <label>반</label>
+                  <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+                    <button className={pClass === "" ? "active" : ""} onClick={() => loadPoints(pGrade, "")}>전체</button>
+                    {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((k) => (
+                      <button key={k} className={pClass === k ? "active" : ""} style={{ flex: "0 0 auto", minWidth: 44 }} onClick={() => loadPoints(pGrade, k)}>
+                        {k}반
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {pErr && <div className="error">{pErr}</div>}
+              <div className="row" style={{ gap: 8, marginTop: 14 }}>
+                <button className="btn-primary" style={{ flex: 1 }} disabled={pBusy || pRows.length === 0} onClick={downloadSummary}>
+                  📊 요약 CSV
+                </button>
+                <button className="btn-ghost" style={{ flex: 1 }} disabled={pBusy} onClick={downloadDetail}>
+                  📋 상세내역 CSV
+                </button>
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                CSV는 엑셀에서 바로 열립니다. (요약=학생별 합계, 상세=부여 기록 전체)
+              </div>
+            </div>
+
+            {pBusy ? (
+              <div className="center muted">불러오는 중…</div>
+            ) : pRows.length === 0 ? (
+              <div className="card muted" style={{ textAlign: "center" }}>학년/반을 선택하면 학생별 상벌점이 표시됩니다.</div>
+            ) : (
+              pRows.map((s) => (
+                <div className="card row spread" key={s.id} style={{ alignItems: "center" }}>
+                  <div>
+                    <div className="title">
+                      {s.name}{" "}
+                      <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
+                        {formatStudentId(s.student_id)}
+                      </span>
+                    </div>
+                    <div className="meta">상점 {s.merit} · 벌점 {s.demerit}</div>
+                  </div>
+                  <span className="badge" style={{ background: s.net >= 0 ? "#1f7a3d" : "#b23b3b" }}>
+                    {s.net > 0 ? "+" : ""}{s.net}
+                  </span>
+                </div>
+              ))
+            )}
+          </>
+        )}
 
         {tab === "account" && (
           <form onSubmit={changeMyPassword} className="card">
