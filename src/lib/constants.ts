@@ -33,6 +33,13 @@ export const STATUS_COLOR: Record<number, string> = {
 
 export const SCHOOL_NAME = "양현고등학교";
 
+// 상벌점 (kind: 1=벌점, 2=상점)
+export const POINT_KIND = { DEMERIT: 1, MERIT: 2 } as const;
+export const POINT_LABEL: Record<number, string> = { 1: "벌점", 2: "상점" };
+export const POINT_COLOR: Record<number, string> = { 1: "#b23b3b", 2: "#1f7a3d" };
+export const DEMERIT_REASONS = ["무단 외출", "복장 위반", "지각", "면학 분위기 저해", "교내 흡연", "기타"];
+export const MERIT_REASONS = ["봉사 활동", "모범 행동", "선행", "수업 태도 우수", "기타"];
+
 /**
  * QR 검증 링크의 기준 주소. 항상 공개 실서비스 도메인을 가리켜야
  * 교문에서 스캔 시 로그인 없이 검증 페이지가 열립니다.

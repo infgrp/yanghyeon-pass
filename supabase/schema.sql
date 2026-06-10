@@ -82,6 +82,22 @@ create table if not exists public.push_subscriptions (
 create index if not exists push_sub_user_idx on public.push_subscriptions (user_id);
 
 -- ──────────────────────────────────────────────
+-- 2f. points 테이블 (상벌점 — 무단외출·복장위반 등 단속 기록)
+--    모든 교사가 모든 학생에게 부여 가능(학교 전체 단속).
+--    kind: 1 = 벌점, 2 = 상점
+-- ──────────────────────────────────────────────
+create table if not exists public.points (
+  id          bigint generated always as identity primary key,
+  student_id  uuid not null references public.users (id) on delete cascade,
+  teacher_id  uuid references public.users (id) on delete set null,
+  kind        smallint not null check (kind in (1, 2)),
+  amount      smallint not null check (amount between 1 and 100),
+  reason      varchar(100) not null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists points_student_idx on public.points (student_id, created_at desc);
+
+-- ──────────────────────────────────────────────
 -- 2e. 사용자 삭제 차단 방지 (기존 DB 재실행 대비)
 --    교사 삭제 시 그가 참조된 passes.teacher_id / teacher_codes.created_by 가
 --    삭제를 막지 않도록 ON DELETE SET NULL 로 교체.
@@ -229,11 +245,18 @@ alter table public.users              enable row level security;
 alter table public.passes             enable row level security;
 alter table public.teacher_codes      enable row level security;
 alter table public.push_subscriptions enable row level security;
+alter table public.points             enable row level security;
 
 -- push_subscriptions: 본인 구독만 생성/조회/삭제 (발송은 service_role 함수가 우회)
 drop policy if exists push_sub_self on public.push_subscriptions;
 create policy push_sub_self on public.push_subscriptions
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- points: 학생은 본인 상벌점만 조회. 교사/관리자의 검색·부여·이력은
+--         points Edge Function(service_role)이 담당하므로 별도 정책 불필요.
+drop policy if exists points_select_self on public.points;
+create policy points_select_self on public.points
+  for select using (student_id = auth.uid());
 
 -- users: 본인 행 조회 / 교사 정보는 모두 조회(승인자 이름 표기용) /
 --        교사는 전체 조회 / 본인 행 수정

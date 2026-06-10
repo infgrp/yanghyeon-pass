@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { pushSupported, isSubscribed, enablePush, disablePush } from "../lib/push";
+import TeacherPoints from "../components/TeacherPoints";
 import type { PassWithStudent } from "../lib/types";
 import {
   PASS_STATUS,
@@ -22,6 +23,7 @@ export default function TeacherHome() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [actingId, setActingId] = useState<number | null>(null);
+  const [view, setView] = useState<"passes" | "points">("passes");
 
   // 웹 푸시 알림
   const [pushOn, setPushOn] = useState(false);
@@ -109,6 +111,19 @@ export default function TeacherHome() {
       </div>
 
       <div className="content">
+        <div className="seg" style={{ marginBottom: 16 }}>
+          <button className={view === "passes" ? "active" : ""} onClick={() => setView("passes")}>
+            외출·조퇴 승인
+          </button>
+          <button className={view === "points" ? "active" : ""} onClick={() => setView("points")}>
+            상벌점
+          </button>
+        </div>
+
+        {view === "points" && <TeacherPoints />}
+
+        {view === "passes" && (
+        <>
         <div className="seg" style={{ marginBottom: 16 }}>
           <button
             className={tab === "pending" ? "active" : ""}
@@ -203,6 +218,8 @@ export default function TeacherHome() {
               ) : null}
             </div>
           ))
+        )}
+        </>
         )}
       </div>
     </div>

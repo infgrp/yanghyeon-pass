@@ -1,5 +1,23 @@
 export type Role = "student" | "teacher" | "parent" | "admin";
 
+export interface PointEntry {
+  id: number;
+  kind: number; // 1=벌점, 2=상점
+  amount: number;
+  reason: string;
+  created_at: string;
+  teacher_name?: string;
+}
+
+export interface PointStudent {
+  id: string;
+  name: string;
+  student_id: string | null;
+  merit: number;
+  demerit: number;
+  net: number;
+}
+
 export interface UserProfile {
   id: string;
   student_id: string | null;

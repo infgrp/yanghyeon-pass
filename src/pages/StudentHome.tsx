@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-import type { Pass } from "../lib/types";
+import type { Pass, PointEntry } from "../lib/types";
 import {
   TYPE_LABEL,
   STATUS_LABEL,
   STATUS_COLOR,
+  POINT_LABEL,
+  POINT_COLOR,
   formatStudentId,
   trimTime,
 } from "../lib/constants";
@@ -15,6 +17,7 @@ export default function StudentHome() {
   const { profile, signOut } = useAuth();
   const nav = useNavigate();
   const [passes, setPasses] = useState<Pass[]>([]);
+  const [points, setPoints] = useState<PointEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -29,8 +32,18 @@ export default function StudentHome() {
       .limit(30);
     if (error) setErr(error.message);
     else setPasses((data ?? []) as Pass[]);
+    // 내 상벌점 (RLS: 본인 것만)
+    const { data: pts } = await supabase
+      .from("points")
+      .select("id, kind, amount, reason, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setPoints((pts ?? []) as PointEntry[]);
     setLoading(false);
   }
+
+  const merit = points.filter((p) => p.kind === 2).reduce((s, p) => s + p.amount, 0);
+  const demerit = points.filter((p) => p.kind === 1).reduce((s, p) => s + p.amount, 0);
 
   useEffect(() => {
     load();
@@ -51,6 +64,36 @@ export default function StudentHome() {
       </div>
 
       <div className="content">
+        {!loading && (
+          <details className="card">
+            <summary style={{ cursor: "pointer", listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="title" style={{ fontSize: 15 }}>🏅 내 상벌점</span>
+              <span className="row" style={{ gap: 10 }}>
+                <span style={{ color: POINT_COLOR[2], fontWeight: 700 }}>상점 {merit}</span>
+                <span style={{ color: POINT_COLOR[1], fontWeight: 700 }}>벌점 {demerit}</span>
+                <span className="badge" style={{ background: merit - demerit >= 0 ? POINT_COLOR[2] : POINT_COLOR[1] }}>
+                  {merit - demerit > 0 ? "+" : ""}{merit - demerit}
+                </span>
+              </span>
+            </summary>
+            <div style={{ marginTop: 10 }}>
+              {points.length === 0 ? (
+                <div className="muted" style={{ fontSize: 13 }}>받은 상벌점이 없습니다.</div>
+              ) : (
+                points.map((p) => (
+                  <div key={p.id} className="row spread" style={{ padding: "7px 0", borderTop: "1px solid var(--line)" }}>
+                    <div>
+                      <span className="badge" style={{ background: POINT_COLOR[p.kind] }}>{POINT_LABEL[p.kind]} {p.amount}</span>
+                      <span style={{ marginLeft: 8 }}>{p.reason}</span>
+                    </div>
+                    <span className="meta">{p.created_at.slice(0, 10)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </details>
+        )}
+
         {loading ? (
           <div className="center muted">불러오는 중…</div>
         ) : err ? (
