@@ -137,6 +137,29 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (action === "give_bulk") {
+      // 여러 학생에게 한 번에 부여
+      const ids = Array.isArray(body.student_ids) ? body.student_ids.map(String) : [];
+      const kind = Number(body.kind);
+      const amount = Number(body.amount);
+      const reason = String(body.reason ?? "").trim().slice(0, 100);
+      if (ids.length === 0) return json({ error: "대상 학생을 선택하세요." }, 400);
+      if (kind !== 1 && kind !== 2) return json({ error: "종류가 올바르지 않습니다." }, 400);
+      if (!Number.isInteger(amount) || amount < 1 || amount > 100)
+        return json({ error: "점수는 1~100 사이여야 합니다." }, 400);
+      if (!reason) return json({ error: "사유를 입력하세요." }, 400);
+      // 실제 학생만 필터
+      const { data: studs } = await admin.from("users").select("id, role").in("id", ids);
+      const validIds = (studs ?? []).filter((s) => s.role === "student").map((s) => s.id);
+      if (validIds.length === 0) return json({ error: "학생 계정이 없습니다." }, 400);
+      const rows = validIds.map((id) => ({
+        student_id: id, teacher_id: user.id, kind, amount, reason,
+      }));
+      const { error } = await admin.from("points").insert(rows);
+      if (error) return json({ error: error.message }, 400);
+      return json({ ok: true, count: rows.length });
+    }
+
     if (action === "detail") {
       const studentId = String(body.student_id ?? "");
       if (!studentId) return json({ error: "대상이 없습니다." }, 400);
