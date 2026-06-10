@@ -3,6 +3,24 @@ import { useNavigate } from "react-router-dom";
 import { supabase, isConfigured } from "../lib/supabase";
 import { buildHomeroom } from "../lib/constants";
 
+// 인앱 브라우저(카카오톡 등) 감지 — 구글 OAuth 가 제한됨
+const UA = typeof navigator !== "undefined" ? navigator.userAgent : "";
+const IN_APP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(UA);
+const IS_KAKAO = /KAKAOTALK/i.test(UA);
+
+function openInExternalBrowser() {
+  const url = window.location.href;
+  if (IS_KAKAO) {
+    // 카카오톡 전용 스킴: 외부 브라우저(크롬/사파리)로 열기
+    window.location.href =
+      "kakaotalk://web/openExternal?url=" + encodeURIComponent(url);
+  } else {
+    // 그 외 인앱: 클립보드 복사 안내
+    navigator.clipboard?.writeText(url).catch(() => {});
+    alert("주소가 복사되었습니다. 크롬/사파리에 붙여넣어 열어주세요.\n" + url);
+  }
+}
+
 /**
  * 로그인 / 회원가입 — Supabase Auth (이메일 + 비밀번호, 학교 계정)
  * 가입 시 메타데이터(name, role, student_id)를 넘기면 DB 트리거가 users 행을 생성합니다.
@@ -96,6 +114,23 @@ export default function Login() {
           <div className="notice">
             ⚠️ Supabase 환경변수가 설정되지 않았습니다. <code>.env</code> 파일에
             VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 를 입력하세요.
+          </div>
+        )}
+
+        {IN_APP && (
+          <div className="notice" style={{ marginBottom: 12 }}>
+            ⚠️ <b>카카오톡 등 앱 안의 화면</b>에서는 구글 로그인이 막힙니다.
+            <div className="muted" style={{ fontSize: 12, margin: "6px 0 10px" }}>
+              아래 버튼으로 <b>크롬/사파리</b>에서 열거나, 그냥 아래 <b>이메일·비밀번호</b>로 로그인하세요.
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ width: "100%" }}
+              onClick={openInExternalBrowser}
+            >
+              크롬/사파리로 열기
+            </button>
           </div>
         )}
 
