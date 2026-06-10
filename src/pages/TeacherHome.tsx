@@ -124,7 +124,8 @@ export default function TeacherHome() {
 
         {view === "passes" && (
         <>
-        <div className="seg" style={{ marginBottom: 16 }}>
+        <div className="subtabs">
+          <span className="subtabs-label">신청 상태</span>
           <button
             className={tab === "pending" ? "active" : ""}
             onClick={() => setTab("pending")}

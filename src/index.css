@@ -167,6 +167,34 @@ button {
   border-color: var(--navy);
 }
 
+/* 하위 필터 탭 (상위 seg 아래 — 작은 알약 모양으로 위계 구분) */
+.subtabs {
+  display: flex;
+  gap: 8px;
+  margin: -4px 0 14px;
+  align-items: center;
+}
+.subtabs .subtabs-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.subtabs button {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 15px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.subtabs button.active {
+  background: #eaf0f8;
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
 .badge {
   display: inline-block;
   font-size: 12px;
