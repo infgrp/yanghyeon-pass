@@ -44,15 +44,22 @@ Deno.serve(async (req) => {
   }
   const action = String(body.action ?? "");
 
-  // 학생들의 상벌점 합계 계산
+  // 기간 필터 (created_at 기준, from 포함 ~ to 미만). 잘못된 값은 무시.
+  const fromISO = typeof body.from === "string" && body.from ? body.from : null;
+  const toISO = typeof body.to === "string" && body.to ? body.to : null;
+
+  // 학생들의 상벌점 합계 계산 (선택한 기간만)
   async function totalsFor(ids: string[]) {
     const map = new Map<string, { merit: number; demerit: number }>();
     ids.forEach((id) => map.set(id, { merit: 0, demerit: 0 }));
     if (ids.length) {
-      const { data: pts } = await admin
+      let q = admin
         .from("points")
         .select("student_id, kind, amount")
         .in("student_id", ids);
+      if (fromISO) q = q.gte("created_at", fromISO);
+      if (toISO) q = q.lt("created_at", toISO);
+      const { data: pts } = await q;
       for (const p of pts ?? []) {
         const t = map.get(p.student_id)!;
         if (p.kind === 2) t.merit += p.amount;
@@ -89,10 +96,13 @@ Deno.serve(async (req) => {
       const info = new Map((studs ?? []).map((s) => [s.id, s]));
       const ids = (studs ?? []).map((s) => s.id);
       if (!ids.length) return json({ entries: [] });
-      const { data: pts } = await admin
+      let pq = admin
         .from("points")
         .select("student_id, kind, amount, reason, teacher_id, created_at")
-        .in("student_id", ids)
+        .in("student_id", ids);
+      if (fromISO) pq = pq.gte("created_at", fromISO);
+      if (toISO) pq = pq.lt("created_at", toISO);
+      const { data: pts } = await pq
         .order("created_at", { ascending: false })
         .limit(5000);
       const tids = [...new Set((pts ?? []).map((p) => p.teacher_id).filter(Boolean))] as string[];

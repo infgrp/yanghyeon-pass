@@ -195,21 +195,77 @@ export default function AdminHome() {
   const [pBusy, setPBusy] = useState(false);
   const [pErr, setPErr] = useState("");
 
+  // 기간 선택 (디폴트: 이번 달)
+  type PeriodMode = "month" | "custom" | "all";
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
+  const [pMonth, setPMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [pFrom, setPFrom] = useState("");
+  const [pTo, setPTo] = useState("");
+
   function prefixOf(g: string, k: string) {
     if (!g) return "";
     return k ? `${g}${k.padStart(2, "0")}` : g;
   }
 
-  async function loadPoints(g: string, k: string) {
+  /**
+   * 선택한 기간을 created_at 필터용 ISO 경계로 변환.
+   * 로컬(한국) 자정 기준으로 from(포함)~to(미만)을 만들어 시간대 오차를 막습니다.
+   * label 은 파일명·표시용.
+   */
+  function rangeOf(
+    mode: PeriodMode,
+    month: string,
+    from: string,
+    to: string,
+  ): { from?: string; to?: string; label: string } {
+    if (mode === "month" && month) {
+      const [y, m] = month.split("-").map(Number);
+      return {
+        from: new Date(y, m - 1, 1, 0, 0, 0, 0).toISOString(),
+        to: new Date(y, m, 1, 0, 0, 0, 0).toISOString(),
+        label: `${y}년${String(m).padStart(2, "0")}월`,
+      };
+    }
+    if (mode === "custom" && (from || to)) {
+      const r: { from?: string; to?: string; label: string } = {
+        label: `${from || "처음"}~${to || "끝"}`,
+      };
+      if (from) {
+        const [y, m, d] = from.split("-").map(Number);
+        r.from = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+      }
+      if (to) {
+        const [y, m, d] = to.split("-").map(Number);
+        // 끝 날짜 당일을 포함하도록 다음 날 자정 미만(exclusive)으로
+        r.to = new Date(y, m - 1, d + 1, 0, 0, 0, 0).toISOString();
+      }
+      return r;
+    }
+    return { label: "전체기간" };
+  }
+
+  function currentRange() {
+    return rangeOf(periodMode, pMonth, pFrom, pTo);
+  }
+
+  async function loadPoints(
+    g: string,
+    k: string,
+    range: { from?: string; to?: string } = currentRange(),
+  ) {
     setPGrade(g);
     setPClass(k);
     setPErr("");
     setPBusy(true);
     try {
       const prefix = prefixOf(g, k);
-      const data = await callPointsFn(
-        prefix ? { action: "search", student_prefix: prefix } : { action: "search", query: "" },
-      );
+      const base = prefix
+        ? { action: "search", student_prefix: prefix }
+        : { action: "search", query: "" };
+      const data = await callPointsFn({ ...base, from: range.from, to: range.to });
       setPRows((data.students ?? []) as PointStudentRow[]);
     } catch (e) {
       setPErr(e instanceof Error ? e.message : "조회 실패");
@@ -218,8 +274,22 @@ export default function AdminHome() {
     }
   }
 
+  // 기간이 바뀌면 동일한 학년/반으로 즉시 재조회 (state 비동기 문제 없이 새 값 사용)
+  function applyPeriod(next: { mode?: PeriodMode; month?: string; from?: string; to?: string }) {
+    const mode = next.mode ?? periodMode;
+    const month = next.month ?? pMonth;
+    const from = next.from ?? pFrom;
+    const to = next.to ?? pTo;
+    if (next.mode !== undefined) setPeriodMode(next.mode);
+    if (next.month !== undefined) setPMonth(next.month);
+    if (next.from !== undefined) setPFrom(next.from);
+    if (next.to !== undefined) setPTo(next.to);
+    loadPoints(pGrade, pClass, rangeOf(mode, month, from, to));
+  }
+
   function downloadSummary() {
     const scope = pGrade ? `${pGrade}학년${pClass ? `_${pClass}반` : ""}` : "전체";
+    const { label } = currentRange();
     const rows: (string | number)[][] = [["학급", "학번", "이름", "상점", "벌점", "합산"]];
     for (const s of pRows) {
       rows.push([
@@ -231,7 +301,7 @@ export default function AdminHome() {
         s.net,
       ]);
     }
-    downloadCSV(`상벌점_요약_${scope}.csv`, rows);
+    downloadCSV(`상벌점_요약_${label}_${scope}.csv`, rows);
   }
 
   async function downloadDetail() {
@@ -239,7 +309,13 @@ export default function AdminHome() {
     setPBusy(true);
     try {
       const prefix = prefixOf(pGrade, pClass);
-      const data = await callPointsFn({ action: "export_detail", student_prefix: prefix });
+      const range = currentRange();
+      const data = await callPointsFn({
+        action: "export_detail",
+        student_prefix: prefix,
+        from: range.from,
+        to: range.to,
+      });
       const scope = pGrade ? `${pGrade}학년${pClass ? `_${pClass}반` : ""}` : "전체";
       const rows: (string | number)[][] = [
         ["일시", "학급", "학번", "이름", "구분", "점수", "사유", "부여교사"],
@@ -256,7 +332,7 @@ export default function AdminHome() {
           e.teacher,
         ]);
       }
-      downloadCSV(`상벌점_상세_${scope}.csv`, rows);
+      downloadCSV(`상벌점_상세_${range.label}_${scope}.csv`, rows);
     } catch (e) {
       setPErr(e instanceof Error ? e.message : "내보내기 실패");
     } finally {
@@ -453,6 +529,62 @@ export default function AdminHome() {
 
         {tab === "points" && (
           <>
+            <div className="card">
+              <label style={{ marginTop: 0 }}>기간</label>
+              <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+                <button
+                  className={periodMode === "month" ? "active" : ""}
+                  onClick={() => applyPeriod({ mode: "month" })}
+                >
+                  월 단위
+                </button>
+                <button
+                  className={periodMode === "custom" ? "active" : ""}
+                  onClick={() => applyPeriod({ mode: "custom" })}
+                >
+                  기간 지정
+                </button>
+                <button
+                  className={periodMode === "all" ? "active" : ""}
+                  onClick={() => applyPeriod({ mode: "all" })}
+                >
+                  전체
+                </button>
+              </div>
+              {periodMode === "month" && (
+                <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <input
+                    type="month"
+                    value={pMonth}
+                    onChange={(e) => applyPeriod({ mode: "month", month: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              )}
+              {periodMode === "custom" && (
+                <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <input
+                    type="date"
+                    value={pFrom}
+                    max={pTo || undefined}
+                    onChange={(e) => applyPeriod({ mode: "custom", from: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                  <span className="muted">~</span>
+                  <input
+                    type="date"
+                    value={pTo}
+                    min={pFrom || undefined}
+                    onChange={(e) => applyPeriod({ mode: "custom", to: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              )}
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                선택한 기간: <b>{currentRange().label}</b> · 아래 학생별 합계와 다운로드에 함께 적용됩니다.
+              </div>
+            </div>
+
             <div className="card">
               <label style={{ marginTop: 0 }}>학년</label>
               <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
