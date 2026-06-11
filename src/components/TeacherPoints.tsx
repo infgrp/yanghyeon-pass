@@ -48,13 +48,70 @@ export default function TeacherPoints({ homeroom }: { homeroom?: string | null }
   // 개별 이력 보기
   const [detail, setDetail] = useState<Detail | null>(null);
 
-  async function loadStudents(opts: { prefix?: string; query?: string }) {
+  // 기간 선택 (디폴트: 이번 달) — 합계가 선택한 기간 기준으로 표시됨
+  type PeriodMode = "month" | "custom" | "all";
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
+  const [pMonth, setPMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [pFrom, setPFrom] = useState("");
+  const [pTo, setPTo] = useState("");
+
+  /**
+   * 선택한 기간을 created_at 필터용 ISO 경계로 변환.
+   * 로컬(한국) 자정 기준 from(포함)~to(미만)으로 만들어 시간대 오차를 막습니다.
+   */
+  function rangeOf(
+    mode: PeriodMode,
+    month: string,
+    from: string,
+    to: string,
+  ): { from?: string; to?: string; label: string } {
+    if (mode === "month" && month) {
+      const [y, m] = month.split("-").map(Number);
+      return {
+        from: new Date(y, m - 1, 1, 0, 0, 0, 0).toISOString(),
+        to: new Date(y, m, 1, 0, 0, 0, 0).toISOString(),
+        label: `${y}년${String(m).padStart(2, "0")}월`,
+      };
+    }
+    if (mode === "custom" && (from || to)) {
+      const r: { from?: string; to?: string; label: string } = {
+        label: `${from || "처음"}~${to || "끝"}`,
+      };
+      if (from) {
+        const [y, m, d] = from.split("-").map(Number);
+        r.from = new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+      }
+      if (to) {
+        const [y, m, d] = to.split("-").map(Number);
+        r.to = new Date(y, m - 1, d + 1, 0, 0, 0, 0).toISOString();
+      }
+      return r;
+    }
+    return { label: "전체기간" };
+  }
+  function currentRange() {
+    return rangeOf(periodMode, pMonth, pFrom, pTo);
+  }
+  // 현재 보고 있는 대상(학년/반 또는 검색어). 없으면 null.
+  function currentSelectionOpts(): { prefix?: string; query?: string } | null {
+    if (grade) return { prefix: klass ? `${grade}${klass.padStart(2, "0")}` : grade };
+    if (query.trim()) return { query };
+    return null;
+  }
+
+  async function loadStudents(
+    opts: { prefix?: string; query?: string },
+    range: { from?: string; to?: string } = currentRange(),
+  ) {
     setErr("");
     setMsg("");
     setSelected(new Set());
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { action: "search" };
+      const body: Record<string, unknown> = { action: "search", from: range.from, to: range.to };
       if (opts.prefix) body.student_prefix = opts.prefix;
       else body.query = (opts.query ?? "").trim();
       const data = await callFn(body);
@@ -65,6 +122,20 @@ export default function TeacherPoints({ homeroom }: { homeroom?: string | null }
     } finally {
       setBusy(false);
     }
+  }
+
+  // 기간이 바뀌면 같은 대상으로 즉시 재조회 (state 비동기 문제 없이 새 값 사용)
+  function applyPeriod(next: { mode?: PeriodMode; month?: string; from?: string; to?: string }) {
+    const mode = next.mode ?? periodMode;
+    const month = next.month ?? pMonth;
+    const from = next.from ?? pFrom;
+    const to = next.to ?? pTo;
+    if (next.mode !== undefined) setPeriodMode(next.mode);
+    if (next.month !== undefined) setPMonth(next.month);
+    if (next.from !== undefined) setPFrom(next.from);
+    if (next.to !== undefined) setPTo(next.to);
+    const sel = currentSelectionOpts();
+    if (sel) loadStudents(sel, rangeOf(mode, month, from, to));
   }
 
   // 담임반 학생 바로 보기 (학년/반 버튼도 함께 활성화)
@@ -213,6 +284,31 @@ export default function TeacherPoints({ homeroom }: { homeroom?: string | null }
 
   return (
     <>
+      {/* 기간 선택 */}
+      <div className="card">
+        <label style={{ marginTop: 0 }}>기간</label>
+        <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
+          <button className={periodMode === "month" ? "active" : ""} onClick={() => applyPeriod({ mode: "month" })}>월 단위</button>
+          <button className={periodMode === "custom" ? "active" : ""} onClick={() => applyPeriod({ mode: "custom" })}>기간 지정</button>
+          <button className={periodMode === "all" ? "active" : ""} onClick={() => applyPeriod({ mode: "all" })}>전체</button>
+        </div>
+        {periodMode === "month" && (
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <input type="month" value={pMonth} onChange={(e) => applyPeriod({ mode: "month", month: e.target.value })} style={{ flex: 1 }} />
+          </div>
+        )}
+        {periodMode === "custom" && (
+          <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+            <input type="date" value={pFrom} max={pTo || undefined} onChange={(e) => applyPeriod({ mode: "custom", from: e.target.value })} style={{ flex: 1 }} />
+            <span className="muted">~</span>
+            <input type="date" value={pTo} min={pFrom || undefined} onChange={(e) => applyPeriod({ mode: "custom", to: e.target.value })} style={{ flex: 1 }} />
+          </div>
+        )}
+        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          아래 학생별 합계는 <b>{currentRange().label}</b> 기준입니다. (개별 '내역'은 전체 이력)
+        </div>
+      </div>
+
       {/* 학년/반 버튼 + 검색 */}
       <div className="card">
         {hr && (
