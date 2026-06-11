@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type { PointStudent, PointEntry } from "../lib/types";
 import {
@@ -8,6 +8,7 @@ import {
   DEMERIT_REASONS,
   MERIT_REASONS,
   formatStudentId,
+  formatHomeroom,
   trimTime,
 } from "../lib/constants";
 
@@ -26,7 +27,10 @@ async function callFn(body: Record<string, unknown>) {
   return data;
 }
 
-export default function TeacherPoints() {
+export default function TeacherPoints({ homeroom }: { homeroom?: string | null }) {
+  // 담임반 코드(예: "301"). 설정된 담임만 "우리 반" 바로보기 노출.
+  const hr = homeroom && homeroom.length >= 3 ? homeroom : null;
+
   const [grade, setGrade] = useState("");
   const [klass, setKlass] = useState("");
   const [query, setQuery] = useState("");
@@ -62,6 +66,21 @@ export default function TeacherPoints() {
       setBusy(false);
     }
   }
+
+  // 담임반 학생 바로 보기 (학년/반 버튼도 함께 활성화)
+  function pickHomeroom() {
+    if (!hr) return;
+    setGrade(hr[0]);
+    setKlass(String(Number(hr.slice(1, 3))));
+    setQuery("");
+    loadStudents({ prefix: hr });
+  }
+
+  // 상벌점 탭을 열면 담임 본인 반을 자동으로 띄워 바로 모니터링
+  useEffect(() => {
+    if (hr) pickHomeroom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hr]);
 
   function pickGrade(g: string) {
     setGrade(g);
@@ -196,7 +215,19 @@ export default function TeacherPoints() {
     <>
       {/* 학년/반 버튼 + 검색 */}
       <div className="card">
-        <label style={{ marginTop: 0 }}>학년</label>
+        {hr && (
+          <>
+            <label style={{ marginTop: 0 }}>우리 반 모니터링</label>
+            <button
+              className="btn-primary"
+              style={{ width: "100%" }}
+              onClick={pickHomeroom}
+            >
+              👨‍🏫 우리 반 ({formatHomeroom(hr)}) 상벌점 보기
+            </button>
+          </>
+        )}
+        <label style={hr ? undefined : { marginTop: 0 }}>학년</label>
         <div className="seg" style={{ flexWrap: "wrap", gap: 6 }}>
           {["1", "2", "3"].map((g) => (
             <button key={g} className={grade === g ? "active" : ""} onClick={() => pickGrade(g)}>{g}학년</button>

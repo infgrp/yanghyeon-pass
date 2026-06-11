@@ -120,7 +120,7 @@ export default function TeacherHome() {
           </button>
         </div>
 
-        {view === "points" && <TeacherPoints />}
+        {view === "points" && <TeacherPoints homeroom={profile?.homeroom ?? null} />}
 
         {view === "passes" && (
         <>
